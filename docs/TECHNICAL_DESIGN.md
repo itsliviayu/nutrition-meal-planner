@@ -162,7 +162,7 @@ interface Nutrition {
   protein: number;
   carbs: number;
   fat: number;
-  fibre: number;
+  fibre?: number;
 
   sugar?: number;
   saturatedFat?: number;
@@ -171,6 +171,13 @@ interface Nutrition {
 
 interface Food {
   id: string;
+
+  referenceFoodId?: string;
+
+  aliases?: string[];
+  referenceSourceName?: string;
+  referenceSourceId?: string;
+  referenceSourceUrl?: string;
 
   name: string;
 
@@ -199,13 +206,94 @@ interface Food {
   regularBuy: boolean;
   favourite: boolean;
 
+  nutritionSource:
+    | "reference"
+    | "package_label"
+    | "manual_estimate";
+
+  fibreSourceMethod?: "AOAC" | "NSP";
+
+  // Phase 1兼容字段；新逻辑以nutritionSource为准
   estimatedNutrition: boolean;
 
   tags: FoodTag[];
 
   compatibleMeals: MealType[];
 }
+
+type ReferenceFood = Food & {
+  aliases: string[];
+  referenceSourceName: string;
+  referenceSourceId: string;
+  referenceSourceUrl: string;
+  nutritionSource: "reference";
+};
 ```
+
+`referenceFoodId`用于记录User Food来自哪个Reference Food。它不替代User Food自己的`id`。
+
+## 4.1 Reference Food与User Food
+
+### Reference Food
+
+Reference Food是系统内置、只读的基础食品参考数据：
+
+```text
+referenceFoods
+```
+
+它作为Common Food搜索源，包含结构化营养、默认份量、aliases、来源元数据、tags和compatibleMeals，但不直接作为用户库存中的可编辑对象。Phase 1.2包含83条Reference Foods，分类数量为20 / 14 / 23 / 12 / 11 / 3（protein / carb / vegetable / fruit / fat_sauce / composite）。
+
+82条Phase 1.2营养数据来自UK CoFID 2021；Plain Skyr使用USDA FoodData Central记录以保持已有`skyr` reference ID有效。`referenceSourceId`保存CoFID Food Code或FDC ID，`referenceSourceUrl`指向对应官方页面。所有数据在构建时静态打包；应用运行时不访问营养数据库或API。
+
+Reference fibre规则：
+
+* 统一`nutrition.fibre`只保存明确的AOAC值
+* 不把NSP值映射或换算到`nutrition.fibre`
+* 缺少可靠AOAC值时保留`nutrition.fibre = undefined`
+* 当前83项中75项有AOAC fibre，8项暂缺，没有任何Reference Food把NSP写入统一字段
+* `fibreSourceMethod = "NSP"`只表示不可与30g/day目标直接比较的数据；当前静态Reference Foods不保存这类值
+
+### User Food
+
+User Food保存在Zustand store和localStorage中。它可以来自：
+
+```text
+Reference Food copy
+Package label manual entry
+Manual estimate entry
+```
+
+从Reference Food创建时必须复制：
+
+* nutrition对象
+* aliases数组和reference source元数据
+* tags数组
+* compatibleMeals数组
+* default serving和单位信息
+
+创建出的User Food拥有新的`id`并保存原始`referenceFoodId`。两者不能共享可变对象引用，确保编辑User Food不会污染reference data。
+
+未来Meal Generator的数据边界固定为Zustand中的User Food Library，不允许直接把Reference Food目录当作可生成食材。
+
+## 4.2 Nutrition Source
+
+```ts
+type NutritionSource =
+  | "reference"
+  | "package_label"
+  | "manual_estimate";
+```
+
+UI对应显示：
+
+```text
+reference       → Reference nutrition / Standard estimate
+package_label   → Package label
+manual_estimate → Manual estimate
+```
+
+`estimatedNutrition`暂时保留用于兼容Phase 1数据；新增和迁移后的数据以`nutritionSource`作为来源真值。
 
 ---
 
@@ -341,6 +429,18 @@ multiplier = 140 / 100;
 Calories = 231
 Protein = 43.4g
 ```
+
+## Default Serving与Package Size
+
+`defaultServing`是未来生成Meal时通常使用的起始份量，不是商品包装净含量。
+
+Phase 1.1不增加package size字段，也不实现：
+
+* 库存剩余克数
+* 库存消耗或自动扣减
+* 包装数量追踪
+
+Inventory仍然只通过`inStock: boolean`表达。
 
 ---
 
@@ -880,6 +980,8 @@ calculateDailyNutrition()
 ```
 
 所有页面都调用它。
+
+`calculateFoodNutrition`只在Food具有AOAC可比fibre时返回portion fibre；未知或`fibreSourceMethod = "NSP"`时返回`fibre = undefined`。`calculateMealNutrition`和`calculateDailyNutrition`把缺失/NSP contribution排除，只汇总AOAC值，因此与30g/day target比较的total不会混入口径不同的数据。为兼容V2已有package-label Food，未标记method的包装fibre仍按英国标签AOAC口径处理；`manual_estimate`未明确标记AOAC时不进入fibre total。
 
 绝对不要：
 
@@ -1467,36 +1569,93 @@ Protein
 
 # 43. Add Food页面
 
+Phase 1.1默认入口不再直接展示完整营养表单。
+
+## Common / Reference Food
+
 ```text
 Add Food
 
-Name
-[                    ]
+[ Search common foods... ]
 
-Category
-[ Protein ▼ ]
+Common foods
 
-Brand
-[                    ]
+Mushrooms
+Vegetable
+≈7 kcal / 100g
 
-Store
-[ Lidl ▼ ]
+Broccoli
+Vegetable
+≈34 kcal / 100g
 
-Nutrition based on
-[ per 100g ▼ ]
-
-Calories
+Egg
 Protein
-Carbs
-Fat
-Fibre
+≈131 kcal / 100g
+
+--------------------
+
+Can't find it?
+
+Add packaged or custom food
+```
+
+搜索要求：
+
+* 大小写不敏感
+* 支持部分匹配
+* 输入即时过滤
+* 同时匹配name和aliases
+* 空搜索固定展示8个热门食品：Egg、Greek Yogurt、Chicken Breast、Mushrooms、Broccoli、Banana、Rice和Pasta
+* 有搜索词时按名称前缀、alias前缀、名称包含和alias包含排序，最多展示12项
+
+选择Reference Food后进入单页极简确认：
+
+```text
+Mushrooms
+Vegetable · Standard estimate
+
+Nutrition summary
 
 Default serving
-[ 200 ] g
+[ 100 ] g
 
 ☑ In stock
 ☐ Regular buy
 ☐ Favourite
+
+Store (optional)
+[                    ]
+
+Add to My Foods
+```
+
+保存调用统一factory创建独立User Food copy。
+
+重复判断只比较：
+
+```text
+referenceFoodId
+或规范化后的name
+```
+
+命中时显示View existing food与Add anyway，不静默创建重复项。
+
+## Packaged / Custom Food
+
+用户点击次要入口后，保留Phase 1完整表单：
+
+```text
+Name
+Category
+Brand
+Store
+Nutrition source
+Nutrition basis
+Calories / Protein / Carbs / Fat / Fibre
+Optional Sugar / Saturated Fat / Salt
+Default serving / Serving unit / Grams per unit
+In stock / Regular buy / Favourite
+Tags / Compatible meals
 
 Save
 ```
@@ -1590,6 +1749,24 @@ recipes
 dailyPlan
 ```
 
+## localStorage持久化版本
+
+当前persist版本为：
+
+```text
+V2
+```
+
+V2迁移规则：
+
+* 原Phase 1 seed food根据id关联到Reference Food，并补充`referenceFoodId`
+* 旧的estimated food映射为`manual_estimate`
+* 旧的非estimated custom food映射为`package_label`
+* 保留已有Food的用户编辑内容和状态
+* 不清空localStorage
+
+Phase 1.2的`aliases`与`referenceSourceName` / `referenceSourceId` / `referenceSourceUrl`是可选Food元数据，persist版本继续使用V2。扩展静态Reference Food目录不触发store迁移，也不会把新的starter foods合并进已有用户库。15个starter User Foods只用于没有持久化状态的首次初始化。
+
 ---
 
 # 47. 推荐目录
@@ -1608,12 +1785,19 @@ pages/
   TodayPage.tsx
   FoodsPage.tsx
   AddFoodPage.tsx
+  ConfirmCommonFoodPage.tsx
+  FoodFormPage.tsx
   RecipesPage.tsx
   ShopPage.tsx
   SettingsPage.tsx
 
 data/
   seedFoods.ts
+  referenceFoods.ts
+  referenceFoodSearch.ts
+  initialFoods.ts
+  foodFactory.ts
+  foodMigration.ts
   recipeTemplates.ts
 
 types/
@@ -1661,6 +1845,36 @@ utils/
 * Add/Edit Food
 * Portion calculator
 * Nutrition calculator
+
+### Phase 1.1 — Add Food UX Refinement
+
+已完成：
+
+* Common / Reference Food搜索入口
+* Search → Select → Confirm快速添加
+* Packaged / Custom Food完整表单入口
+* Reference Food与User Food分离
+* `referenceFoodId`和`nutritionSource`
+* 简单重复提示
+* Default Serving与Package Size概念区分
+* localStorage V2及Phase 1数据迁移
+
+Phase 1.1只优化数据来源和Add Food UX，不改变Phase 2–4范围。
+
+---
+
+### Phase 1.2 — Reference Food Expansion
+
+已完成：
+
+* 83项本地静态Reference Foods，覆盖六类食品
+* UK CoFID 2021 / USDA FDC来源名称、记录ID和官方URL元数据
+* 英国语境显示名称及aliases搜索
+* 固定8项Popular Picks和最多12项搜索结果
+* 15个仅用于全新安装的starter User Food copies
+* V2持久化兼容，既有User Food Library不被覆盖
+
+Phase 1.2不增加运行时API、Meal Generator、Recipe Template、Shopping或库存数量逻辑。
 
 ---
 
@@ -2052,6 +2266,24 @@ Do not start Phase 2.
 □ 50g食品能正确×0.5
 
 □ 所有计算逻辑不依赖UI组件
+
+□ 可以从Common Food搜索中选择Reference Food并快速确认加入
+
+□ 加入后生成独立User Food，编辑不会修改Reference Food
+
+□ 重复选择同一个Reference Food时会提示View existing或Add anyway
+
+□ Packaged / Custom Food仍可以进入完整表单
+
+□ 旧Phase 1 localStorage数据可以迁移到V2
+
+□ Reference Food总量为83项，且每项包含权威来源元数据
+
+□ mush / cour / zucchini / shrimp / eggplant均能命中预期Reference Food
+
+□ 空搜索只展示8个Popular Picks
+
+□ 全新安装初始化15个独立的reference-linked User Foods
 ```
 
 如果这些全部通过，再进入Phase 2。

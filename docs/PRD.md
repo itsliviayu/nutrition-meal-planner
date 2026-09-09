@@ -356,6 +356,12 @@ Composite Food依然保存完整营养数据。
 
 ```text
 id
+referenceFoodId (optional)
+aliases (optional; Reference Food search only)
+
+referenceSourceName (optional)
+referenceSourceId (optional)
+referenceSourceUrl (optional)
 
 name
 brand
@@ -368,7 +374,7 @@ nutrition:
   protein
   carbs
   fat
-  fibre
+  fibre (optional when comparable AOAC data is unavailable)
 
 optional:
   saturatedFat
@@ -405,10 +411,41 @@ tags:
   etc.
 
 nutritionSource:
-  packageLabel
-  estimated
-  manuallyEntered
+  reference
+  package_label
+  manual_estimate
+
+fibreSourceMethod (optional):
+  AOAC
+  NSP
 ```
+
+`referenceFoodId`只存在于从系统参考食品创建的User Food中，用于记录来源和进行简单重复判断。它不是Food的主键。
+
+系统中的食品数据分为两个层级：
+
+### Reference Food
+
+系统内置的基础食品参考数据，例如Egg、Mushrooms、Broccoli和Banana。
+
+Reference Food：
+
+* 提供标准估算营养数据和默认份量
+* 作为Common Food搜索的数据源
+* 保存搜索别名和可追溯的营养来源元数据
+* 不直接作为用户可编辑的库存记录
+* 不因用户修改自己的食品而改变
+
+### User Food
+
+用户个人Food Library中的食品记录。
+
+User Food可以：
+
+* 从Reference Food复制创建
+* 通过包装营养表手动创建
+* 使用用户自行估算的数据创建
+* 独立修改default serving、store和各类状态
 
 ---
 
@@ -416,7 +453,7 @@ nutritionSource:
 
 系统必须区分：
 
-### Exact / Label
+### Package Label
 
 例如：
 
@@ -433,7 +470,15 @@ Lidl yogurt包装写：
 
 ---
 
-### Estimated
+对应：
+
+```text
+nutritionSource = package_label
+```
+
+---
+
+### Reference Nutrition
 
 例如：
 
@@ -451,6 +496,24 @@ UI可以显示：
 
 **104.73 kcal**
 
+对应：
+
+```text
+nutritionSource = reference
+```
+
+---
+
+### Manual Estimate
+
+如果用户没有包装标签，也没有选择系统Reference Food，但仍希望自行填写估算值：
+
+```text
+nutritionSource = manual_estimate
+```
+
+UI以中性的“Manual estimate”标识，不把估算来源显示成错误或警告。
+
 ---
 
 ### 原则
@@ -459,37 +522,116 @@ UI可以显示：
 
 营养计算必须来自结构化 Food 数据。
 
+Phase 1.2的Reference Food营养值来自本地静态的UK CoFID 2021数据，缺少合适条目时使用USDA FoodData Central。每条记录保存：
+
+```text
+referenceSourceName = UK CoFID 2021 or USDA FoodData Central
+referenceSourceId = CoFID Food Code or FDC ID
+referenceSourceUrl = official source URL
+```
+
+当前Reference Food目录共83项：20 protein、14 carb、23 vegetable、12 fruit、11 fat/sauce和3 composite。82项来自CoFID；为了保持已有`skyr` reference ID有效，Plain Skyr使用USDA FoodData Central记录。CoFID的`Tr`值在数字模型中归一为0。
+
+Daily fibre target的30g/day严格按英国AOAC fibre口径理解。统一`fibre`字段只保存明确可比较的AOAC值，绝不把NSP值直接写入；找不到可靠AOAC值时保留`fibre = undefined`。当前75项有AOAC fibre，8项暂缺。Meal / Daily Nutrition计算只汇总AOAC可比值，`fibreSourceMethod = NSP`或未知值不参与30g target比较。
+
 ---
 
-# 9. 添加自定义食品
+# 9. Add Food
 
 入口：
 
 **Food Library → + Add Food**
 
-V1手动填写：
+Phase 1.1将Add Food分成两条简短路径。
+
+## 9.1 Common / Reference Food Quick Add
+
+用于通常没有包装营养表的天然或基础食品，例如：
+
+* Mushrooms
+* Broccoli
+* Banana
+* Apple
+* Egg
+* Chicken Breast
+* Potato
+* Spinach
+
+流程保持为：
+
+```text
+Search → Select → Confirm
+```
+
+用户搜索并选择Reference Food后，系统直接带出结构化参考营养数据。确认页面只需要显示或允许调整：
+
+* Food name
+* Category
+* Nutrition summary
+* Default serving
+* In Stock
+* Regular Buy
+* Favourite
+* Optional Store
+
+用户不需要重新填写Calories、Protein、Carbs、Fat或Fibre。
+
+保存时系统创建一份独立User Food copy，并设置：
+
+```text
+referenceFoodId = selected Reference Food id
+nutritionSource = reference
+```
+
+后续编辑User Food不会修改Reference Food。
+
+如果用户库中已经存在同名食品或相同`referenceFoodId`，系统提示：
+
+```text
+{Food name} is already in your food library.
+```
+
+并提供：
+
+* View existing food
+* Add anyway
+
+## 9.2 Packaged / Custom Food Manual Entry
+
+Common Food搜索结果下方提供次要入口：
+
+**Add packaged or custom food**
+
+只有包装食品或自定义食品进入完整营养表单。V1手动填写：
 
 ### Required
 
 * Food name
 * Category
+* Nutrition source
+* Nutrition basis
 * Calories
 * Protein
 * Carbs
 * Fat
-* Nutrition basis
+* Fibre
 * Default serving
+* Serving unit
 
 ### Optional
 
-* Fibre
 * Sugar
 * Saturated fat
 * Salt
 * Brand
 * Store
+* Grams per unit（需要单位换算时）
 * Favourite
 * In stock
+* Regular buy
+* Tags
+
+另外至少选择一个compatible meal。
 
 例如：
 
@@ -511,9 +653,46 @@ Default serving
 Store
 Lidl
 
+包装标签数据保存为：
+
+```text
+nutritionSource = package_label
+```
+
+如果数据是用户自行估算，则保存为：
+
+```text
+nutritionSource = manual_estimate
+```
+
+## 9.3 Default Serving不是Package Size
+
+`defaultServing`表示：
+
+> 生成餐食时通常使用多少。
+
+它不表示包装净含量。
+
+例如Mushrooms包装为200g，并不意味着默认份量必须是200g。V1暂不增加package size字段，也不追踪剩余克数、库存扣减或包装数量。
+
+## 9.4 Phase 1.2 Reference Food搜索范围
+
+Common Food搜索覆盖全部83个本地Reference Foods。搜索支持：
+
+* 大小写不敏感
+* 名称部分匹配
+* alias部分匹配
+* 英国语境主名称及常见同义词，例如Courgette / zucchini、Prawns / shrimp、Aubergine / eggplant、Spring Onion / scallion / green onion和Yogurt / yoghurt
+
+alias只用于搜索，不在普通UI中展示。空搜索固定只显示8个Popular Picks：Egg、Greek Yogurt、Chicken Breast、Mushrooms、Broccoli、Banana、Rice和Pasta。
+
+全新安装初始化15个User Foods。它们通过Reference Food factory创建独立copy；已存在的localStorage Food Library不会被补写、替换或重新初始化。未来Meal Generator只允许读取User Food Library，不直接读取Reference Food目录。
+
 ---
 
 # 10. V1.1：拍营养表识别
+
+注意：本节是未来OCR / Vision候选功能，不属于已经完成的“Phase 1.1 — Add Food UX Refinement”。当前Add Food不会联网，也不会进行AI或拍照识别。
 
 后续增加：
 
@@ -568,6 +747,8 @@ Food Library中的食品可设置：
 ### All Foods
 
 整个个人数据库。
+
+V1库存状态仍然只是`inStock = true / false`。不记录package size、剩余重量、包装数量或使用后的自动扣减。
 
 ---
 
@@ -1517,7 +1698,7 @@ Evening Snack
 
 ### 3. Add/Edit Food
 
-录入营养信息。
+Common Food通过Search → Select → Confirm快速加入；Packaged / Custom Food使用完整营养表单；已有User Food可以继续编辑。
 
 ### 4. Recipes
 
@@ -1572,6 +1753,16 @@ Excluded foods
 V1：
 
 **localStorage**
+
+当前持久化schema版本：
+
+```text
+V2
+```
+
+V2增加`referenceFoodId`和`nutritionSource`，并支持将Phase 1已保存的Food数据自动迁移，不清空或覆盖用户已有食品。
+
+Phase 1.2新增的`aliases`和reference source字段为可选元数据，因此persist版本保持V2，不需要新的localStorage migration。Reference Food目录扩展只影响静态搜索源和全新安装的starter foods。
 
 保存：
 
