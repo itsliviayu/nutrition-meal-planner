@@ -13,6 +13,13 @@ export const recipeTemplates: RecipeTemplate[] = [
       { id: "toast", type: "specific", allowedFoodIds: ["wholemeal-toast", "white-bread", "bagel"], minItems: 1, maxItems: 1, optional: false },
       { id: "vegetable", type: "vegetable", allowedTags: ["breakfast"], minItems: 0, maxItems: 1, optional: true },
     ],
+    nameRule: { ingredientSlotIds: ["eggs", "vegetable"], suffix: "Toast", maxIngredients: 2 },
+    instructionSteps: [
+      { text: "Cook {eggs} until set and cooked through." },
+      { text: "Toast {toast} to your liking." },
+      { text: "Prepare {vegetable} and add it to the plate.", whenSlotsPresent: ["vegetable"] },
+      { text: "Serve everything together and season to taste." },
+    ],
   },
   {
     id: "yogurt-bowl",
@@ -25,6 +32,13 @@ export const recipeTemplates: RecipeTemplate[] = [
       { id: "yogurt", type: "specific", allowedFoodIds: ["greek-yogurt", "skyr", "cottage-cheese"], minItems: 1, maxItems: 1, optional: false },
       { id: "fruit", type: "fruit", minItems: 1, maxItems: 2, optional: false },
       { id: "topping", type: "fat_sauce", allowedTags: ["sweet"], minItems: 0, maxItems: 1, optional: true },
+    ],
+    nameRule: { ingredientSlotIds: ["yogurt", "fruit"], suffix: "Bowl", maxIngredients: 2 },
+    instructionSteps: [
+      { text: "Add {yogurt} to a bowl." },
+      { text: "Prepare {fruit} and spoon it over the top." },
+      { text: "Finish with {topping}.", whenSlotsPresent: ["topping"] },
+      { text: "Combine gently and serve. No cooking required." },
     ],
   },
   {
@@ -39,6 +53,13 @@ export const recipeTemplates: RecipeTemplate[] = [
       { id: "protein", type: "specific", allowedFoodIds: ["semi-skimmed-milk", "greek-yogurt", "skyr"], minItems: 1, maxItems: 1, optional: false },
       { id: "fruit", type: "fruit", minItems: 0, maxItems: 1, optional: true },
     ],
+    nameRule: { ingredientSlotIds: ["fruit", "protein"], suffix: "Oat Bowl", maxIngredients: 1 },
+    instructionSteps: [
+      { text: "Cook {oats} according to the package instructions." },
+      { text: "Stir in {protein} until evenly combined." },
+      { text: "Prepare {fruit} and add it on top.", whenSlotsPresent: ["fruit"] },
+      { text: "Serve warm." },
+    ],
   },
   {
     id: "savoury-toast",
@@ -52,6 +73,13 @@ export const recipeTemplates: RecipeTemplate[] = [
       { id: "protein", type: "protein", allowedTags: ["breakfast", "savoury"], minItems: 1, maxItems: 1, optional: false },
       { id: "vegetable", type: "vegetable", allowedTags: ["breakfast"], minItems: 0, maxItems: 1, optional: true },
     ],
+    nameRule: { ingredientSlotIds: ["protein", "vegetable"], suffix: "Toast", maxIngredients: 2 },
+    instructionSteps: [
+      { text: "Toast {toast} until crisp." },
+      { text: "Prepare {protein}, cooking it through where needed." },
+      { text: "Prepare {vegetable} and add it over the toast.", whenSlotsPresent: ["vegetable"] },
+      { text: "Top the toast with {protein}, season to taste and serve." },
+    ],
   },
   {
     id: "quick-breakfast-plate",
@@ -62,6 +90,11 @@ export const recipeTemplates: RecipeTemplate[] = [
     tags: ["breakfast", "quick"],
     slots: [
       { id: "quick-items", type: "specific", allowedFoodIds: ["egg", "greek-yogurt", "skyr", "cottage-cheese", "wholemeal-toast", "white-bread", "bagel", "banana", "apple", "blueberries"], minItems: 2, maxItems: 3, optional: false },
+    ],
+    nameRule: { ingredientSlotIds: ["quick-items"], suffix: "Breakfast Plate", maxIngredients: 2 },
+    instructionSteps: [
+      { text: "Prepare {quick-items} as needed so each ingredient is ready to eat." },
+      { text: "Arrange everything on a plate and serve." },
     ],
   },
   {
@@ -77,6 +110,14 @@ export const recipeTemplates: RecipeTemplate[] = [
       { id: "vegetable", type: "vegetable", minItems: 1, maxItems: 2, optional: false },
       { id: "sauce", type: "fat_sauce", minItems: 0, maxItems: 1, optional: true },
     ],
+    nameRule: { ingredientSlotIds: ["protein", "vegetable"], suffix: "Pasta", maxIngredients: 2 },
+    instructionSteps: [
+      { text: "Cook {pasta} according to the package instructions." },
+      { text: "Prepare and cook {protein} until cooked through." },
+      { text: "Add {vegetable} and cook until tender." },
+      { text: "Stir in {sauce}.", whenSlotsPresent: ["sauce"] },
+      { text: "Combine with {pasta}, season to taste and serve." },
+    ],
   },
   {
     id: "rice-bowl",
@@ -90,6 +131,14 @@ export const recipeTemplates: RecipeTemplate[] = [
       { id: "protein", type: "protein", minItems: 1, maxItems: 1, optional: false },
       { id: "vegetable", type: "vegetable", minItems: 1, maxItems: 2, optional: false },
       { id: "sauce", type: "fat_sauce", minItems: 0, maxItems: 1, optional: true },
+    ],
+    nameRule: { ingredientSlotIds: ["protein", "vegetable"], suffix: "Rice Bowl", maxIngredients: 2 },
+    instructionSteps: [
+      { text: "Cook or heat {rice} according to the package instructions." },
+      { text: "Prepare and cook {protein} until cooked through." },
+      { text: "Cook {vegetable} until tender." },
+      { text: "Add {sauce} and stir through.", whenSlotsPresent: ["sauce"] },
+      { text: "Arrange everything in a bowl and serve." },
     ],
   },
   {
@@ -105,6 +154,14 @@ export const recipeTemplates: RecipeTemplate[] = [
       { id: "vegetable", type: "vegetable", minItems: 1, maxItems: 2, optional: false },
       { id: "sauce", type: "specific", allowedFoodIds: ["soy-sauce", "olive-oil", "rapeseed-oil"], minItems: 0, maxItems: 1, optional: true },
     ],
+    nameRule: { ingredientSlotIds: ["protein", "vegetable"], suffix: "Stir Fry", maxIngredients: 2 },
+    instructionSteps: [
+      { text: "Cook or heat {base} according to the package instructions." },
+      { text: "Cook {protein} in a hot pan until cooked through." },
+      { text: "Add {vegetable} and stir-fry until tender." },
+      { text: "Stir through {sauce}.", whenSlotsPresent: ["sauce"] },
+      { text: "Serve with {base} and season to taste." },
+    ],
   },
   {
     id: "oven-tray-meal",
@@ -118,6 +175,14 @@ export const recipeTemplates: RecipeTemplate[] = [
       { id: "potato", type: "specific", allowedFoodIds: ["potato", "sweet-potato"], minItems: 1, maxItems: 1, optional: false },
       { id: "vegetable", type: "vegetable", allowedTags: ["oven"], minItems: 1, maxItems: 2, optional: false },
       { id: "oil", type: "specific", allowedFoodIds: ["olive-oil", "rapeseed-oil"], minItems: 0, maxItems: 1, optional: true },
+    ],
+    nameRule: { ingredientSlotIds: ["protein", "potato"], suffix: "Tray", maxIngredients: 2 },
+    instructionSteps: [
+      { text: "Heat the oven and prepare {protein}, {potato} and {vegetable}." },
+      { text: "Arrange everything evenly on a baking tray." },
+      { text: "Coat with {oil}.", whenSlotsPresent: ["oil"] },
+      { text: "Roast until {protein} is cooked through and the vegetables are tender." },
+      { text: "Season to taste and serve." },
     ],
   },
   {
@@ -133,6 +198,15 @@ export const recipeTemplates: RecipeTemplate[] = [
       { id: "vegetable", type: "vegetable", minItems: 1, maxItems: 2, optional: false },
       { id: "sauce", type: "fat_sauce", minItems: 0, maxItems: 1, optional: true },
     ],
+    nameRule: { ingredientSlotIds: ["protein", "vegetable"], suffix: "Wrap", maxIngredients: 2 },
+    instructionSteps: [
+      { text: "Prepare {protein}, cooking it through where needed." },
+      { text: "Lay out {wrap} and add {vegetable}." },
+      { text: "Add {protein}." },
+      { text: "Spoon over {sauce}.", whenSlotsPresent: ["sauce"] },
+      { text: "Season to taste and roll up tightly." },
+      { text: "Slice and serve." },
+    ],
   },
   {
     id: "potato-plate",
@@ -147,6 +221,14 @@ export const recipeTemplates: RecipeTemplate[] = [
       { id: "vegetable", type: "vegetable", minItems: 1, maxItems: 2, optional: false },
       { id: "sauce", type: "fat_sauce", minItems: 0, maxItems: 1, optional: true },
     ],
+    nameRule: { ingredientSlotIds: ["protein", "potato"], suffix: "Plate", maxIngredients: 2 },
+    instructionSteps: [
+      { text: "Cook {potato} in the microwave until tender." },
+      { text: "Prepare {protein}, cooking it through where needed." },
+      { text: "Cook or prepare {vegetable}." },
+      { text: "Add {sauce}.", whenSlotsPresent: ["sauce"] },
+      { text: "Arrange everything on a plate, season to taste and serve." },
+    ],
   },
   {
     id: "yogurt-snack",
@@ -158,6 +240,12 @@ export const recipeTemplates: RecipeTemplate[] = [
     slots: [
       { id: "yogurt", type: "specific", allowedFoodIds: ["greek-yogurt", "skyr", "cottage-cheese"], minItems: 1, maxItems: 1, optional: false },
       { id: "fruit", type: "fruit", minItems: 0, maxItems: 1, optional: true },
+    ],
+    nameRule: { ingredientSlotIds: ["yogurt", "fruit"], suffix: "Snack", maxIngredients: 2 },
+    instructionSteps: [
+      { text: "Spoon {yogurt} into a bowl." },
+      { text: "Prepare {fruit} and add it on top.", whenSlotsPresent: ["fruit"] },
+      { text: "Combine gently and serve. No cooking required." },
     ],
   },
   {
@@ -171,6 +259,12 @@ export const recipeTemplates: RecipeTemplate[] = [
       { id: "egg", type: "specific", allowedFoodIds: ["egg"], minItems: 1, maxItems: 1, optional: false },
       { id: "produce", type: "specific", allowedFoodIds: ["tomato", "carrot", "cucumber", "celery"], minItems: 0, maxItems: 1, optional: true },
     ],
+    nameRule: { ingredientSlotIds: ["egg", "produce"], suffix: "Snack", maxIngredients: 2 },
+    instructionSteps: [
+      { text: "Cook {egg} until set and cooked through." },
+      { text: "Wash and prepare {produce}.", whenSlotsPresent: ["produce"] },
+      { text: "Serve together and season to taste." },
+    ],
   },
   {
     id: "fruit-protein-snack",
@@ -182,6 +276,12 @@ export const recipeTemplates: RecipeTemplate[] = [
     slots: [
       { id: "fruit", type: "fruit", minItems: 1, maxItems: 1, optional: false },
       { id: "protein", type: "protein", allowedTags: ["snack"], minItems: 1, maxItems: 1, optional: false },
+    ],
+    nameRule: { ingredientSlotIds: ["fruit", "protein"], suffix: "Snack", maxIngredients: 2 },
+    instructionSteps: [
+      { text: "Prepare {protein} as needed so it is ready to eat." },
+      { text: "Prepare {fruit} and arrange it with {protein}." },
+      { text: "Serve straight away. No extra ingredients are needed." },
     ],
   },
 ];

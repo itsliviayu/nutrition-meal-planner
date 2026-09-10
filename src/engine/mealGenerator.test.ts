@@ -39,6 +39,8 @@ const template = (overrides: Partial<RecipeTemplate> = {}): RecipeTemplate => ({
     { id: "carb", type: "carb", minItems: 1, maxItems: 1, optional: false },
     { id: "veg", type: "vegetable", minItems: 1, maxItems: 1, optional: false },
   ],
+  nameRule: { ingredientSlotIds: ["protein", "veg"], suffix: "Meal", maxIngredients: 2 },
+  instructionSteps: [{ text: "Combine {protein}, {carb} and {veg}." }],
   ...overrides,
 });
 

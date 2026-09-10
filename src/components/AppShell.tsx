@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Icon } from "./Icon";
 
-export type AppRoute = "today" | "foods" | "recipes" | "shop" | "settings" | "add-food" | "confirm-food" | "custom-food" | "edit-food";
+export type AppRoute = "today" | "foods" | "recipes" | "shop" | "settings" | "add-food" | "confirm-food" | "custom-food" | "edit-food" | "recipe-detail" | "saved-recipe-detail";
 
 interface AppShellProps {
   route: AppRoute;

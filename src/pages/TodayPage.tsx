@@ -7,6 +7,7 @@ import type { PlanningMode } from "../utils/planningMode";
 
 interface TodayPageProps {
   onOpenFoods: () => void;
+  onOpenRecipe: (mealType: MealType) => void;
 }
 
 interface SwipeStart {
@@ -62,7 +63,7 @@ function PlanningModeControl({
   );
 }
 
-export function TodayPage({ onOpenFoods }: TodayPageProps) {
+export function TodayPage({ onOpenFoods, onOpenRecipe }: TodayPageProps) {
   const profile = useAppStore((state) => state.profile);
   const foods = useAppStore((state) => state.foods);
   const dailyPlan = useAppStore(selectActiveDailyPlan);
@@ -107,6 +108,7 @@ export function TodayPage({ onOpenFoods }: TodayPageProps) {
         key={mealType}
         meal={dailyPlan[mealType]}
         foods={foods}
+        onOpenRecipe={() => onOpenRecipe(mealType)}
         onRegenerate={() => regenerateMeal(mealType)}
         onToggleLock={(foodId) => toggleMealItemLock(mealType, foodId)}
         onUpdatePortion={(foodId, amount) => updateMealItemPortion(mealType, foodId, amount)}

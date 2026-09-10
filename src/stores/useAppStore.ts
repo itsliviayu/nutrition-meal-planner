@@ -7,7 +7,9 @@ import { generateDailyPlan as buildDailyPlan } from "../engine/dailyGenerator";
 import { generateMeal } from "../engine/mealGenerator";
 import { recalculateDailyPlan, updateMealItemPortion as updatePlanPortion } from "../engine/planNutrition";
 import { targetForMealRegeneration } from "../engine/dailyGenerator";
-import type { DailyPlan, Food, MealType, UserProfile } from "../types";
+import { createSavedRecipeSnapshot, deriveGeneratedRecipe, recipeSnapshotKey } from "../engine/generatedRecipe";
+import { getIngredientSwapCandidates } from "../engine/recipeSwap";
+import type { DailyPlan, Food, GeneratedRecipe, MealType, SavedRecipe, UserProfile } from "../types";
 import {
   inventoryOnlyFromPlanningMode,
   planningModeFromInventoryOnly,
@@ -24,6 +26,7 @@ export interface AppState {
   foods: Food[];
   dailyPlans: ModeDailyPlans;
   activePlanningMode: PlanningMode;
+  savedRecipes: SavedRecipe[];
   recentFoodIds: string[];
   recentRecipeTemplateIds: string[];
   generationMessage: string | null;
@@ -40,6 +43,9 @@ export interface AppState {
   regenerateMeal: (mealType: MealType) => boolean;
   toggleMealItemLock: (mealType: MealType, foodId: string) => void;
   updateMealItemPortion: (mealType: MealType, foodId: string, amount: number) => void;
+  swapMealItem: (mealType: MealType, foodId: string, replacementFoodId: string) => boolean;
+  saveRecipe: (recipe: GeneratedRecipe) => SavedRecipe;
+  deleteSavedRecipe: (id: string) => void;
   clearGenerationMessage: () => void;
 }
 
@@ -48,6 +54,7 @@ export interface PersistedAppData {
   foods: Food[];
   dailyPlans: ModeDailyPlans;
   activePlanningMode: PlanningMode;
+  savedRecipes: SavedRecipe[];
   recentFoodIds: string[];
   recentRecipeTemplateIds: string[];
 }
@@ -59,7 +66,7 @@ export interface LegacyPersistedAppData {
 
 type PersistedAppInput = Partial<PersistedAppData> & Partial<LegacyPersistedAppData>;
 
-export const APP_STORAGE_VERSION = 3;
+export const APP_STORAGE_VERSION = 4;
 
 const emptyDailyPlans = (): ModeDailyPlans => ({ free: null, inventory: null });
 
@@ -88,6 +95,7 @@ export const normalizePersistedAppData = (
     foods: persisted?.foods ?? initialUserFoods,
     dailyPlans,
     activePlanningMode,
+    savedRecipes: persisted?.savedRecipes ?? [],
     recentFoodIds: persisted?.recentFoodIds ?? [],
     recentRecipeTemplateIds: persisted?.recentRecipeTemplateIds ?? [],
   };
@@ -152,6 +160,7 @@ export const useAppStore = create<AppState>()(
       foods: initialUserFoods,
       dailyPlans: emptyDailyPlans(),
       activePlanningMode: "free",
+      savedRecipes: [],
       recentFoodIds: [],
       recentRecipeTemplateIds: [],
       generationMessage: null,
@@ -287,6 +296,61 @@ export const useAppStore = create<AppState>()(
           },
         };
       }),
+      swapMealItem: (mealType, foodId, replacementFoodId) => {
+        const state = get();
+        const mode = state.activePlanningMode;
+        const activePlan = selectActiveDailyPlan(state);
+        if (!activePlan) return false;
+        const meal = activePlan[mealType];
+        const replacement = getIngredientSwapCandidates({
+          meal,
+          foods: state.foods,
+          targetFoodId: foodId,
+          planningMode: mode,
+        }).find((candidate) => candidate.id === replacementFoodId);
+        if (!replacement) return false;
+
+        const nextMeal = {
+          ...meal,
+          items: meal.items.map((item) => item.foodId === foodId
+            ? {
+              foodId: replacement.id,
+              amount: replacement.defaultServing,
+              unit: replacement.servingUnit,
+              locked: false,
+            }
+            : item),
+        };
+        const nextPlan = recalculateDailyPlan(
+          { ...activePlan, [mealType]: nextMeal },
+          state.foods,
+          state.profile,
+        );
+        const namedMeal = nextPlan[mealType];
+        const generatedRecipe = deriveGeneratedRecipe(namedMeal, state.foods);
+        set({
+          dailyPlans: {
+            ...state.dailyPlans,
+            [mode]: {
+              ...nextPlan,
+              [mealType]: { ...namedMeal, name: generatedRecipe.name },
+            },
+          },
+        });
+        return true;
+      },
+      saveRecipe: (recipe) => {
+        const state = get();
+        const key = recipeSnapshotKey(recipe);
+        const existing = state.savedRecipes.find((saved) => recipeSnapshotKey(saved) === key);
+        if (existing) return existing;
+        const savedRecipe = createSavedRecipeSnapshot(recipe);
+        set({ savedRecipes: [savedRecipe, ...state.savedRecipes] });
+        return savedRecipe;
+      },
+      deleteSavedRecipe: (id) => set((state) => ({
+        savedRecipes: state.savedRecipes.filter((recipe) => recipe.id !== id),
+      })),
       clearGenerationMessage: () => set({ generationMessage: null }),
     }),
     {
@@ -298,6 +362,7 @@ export const useAppStore = create<AppState>()(
         foods,
         dailyPlans,
         activePlanningMode,
+        savedRecipes,
         recentFoodIds,
         recentRecipeTemplateIds,
       }) => ({
@@ -305,6 +370,7 @@ export const useAppStore = create<AppState>()(
         foods,
         dailyPlans,
         activePlanningMode,
+        savedRecipes,
         recentFoodIds,
         recentRecipeTemplateIds,
       }),

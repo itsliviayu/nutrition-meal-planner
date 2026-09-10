@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { defaultProfile } from "../data/defaultProfile";
 import { initialUserFoods } from "../data/initialFoods";
-import type { DailyPlan, MealPlan, MealType } from "../types";
+import type { DailyPlan, MealPlan, MealType, SavedRecipe } from "../types";
 import type { PlanningMode } from "../utils/planningMode";
 import {
   APP_STORAGE_VERSION,
@@ -41,6 +41,19 @@ const plan = (label: string, withEgg = false): DailyPlan => ({
 
 const freePlan = plan("free", true);
 const inventoryPlan = plan("inventory", true);
+const savedRecipe: SavedRecipe = {
+  id: "saved-recipe",
+  name: "Saved Egg Breakfast",
+  sourceTemplateId: "quick-breakfast-plate",
+  mealType: "breakfast",
+  ingredients: [{ foodId: "starter-egg", foodName: "Egg", amount: 100, unit: "g" }],
+  cookingTime: 5,
+  equipment: [],
+  instructions: ["Prepare the egg."],
+  nutrition,
+  fibreDataComplete: false,
+  createdAt: "2026-09-10T12:00:00.000Z",
+};
 
 const resetStore = (dailyPlans: ModeDailyPlans = { free: null, inventory: null }) => {
   useAppStore.setState({
@@ -48,6 +61,7 @@ const resetStore = (dailyPlans: ModeDailyPlans = { free: null, inventory: null }
     foods: initialUserFoods,
     dailyPlans,
     activePlanningMode: "free",
+    savedRecipes: [],
     recentFoodIds: [],
     recentRecipeTemplateIds: [],
     generationMessage: null,
@@ -156,13 +170,14 @@ describe("mode-specific DailyPlan state", () => {
   });
 });
 
-describe("V3 persisted app data", () => {
-  it("restores both plans and the selected mode after a JSON round trip", () => {
+describe("V4 persisted app data", () => {
+  it("restores both plans, the selected mode and Saved Recipes after a JSON round trip", () => {
     const saved: PersistedAppData = {
       profile: defaultProfile,
       foods: initialUserFoods,
       dailyPlans: { free: freePlan, inventory: inventoryPlan },
       activePlanningMode: "inventory",
+      savedRecipes: [savedRecipe],
       recentFoodIds: ["starter-egg"],
       recentRecipeTemplateIds: ["egg-snack"],
     };
@@ -172,6 +187,7 @@ describe("V3 persisted app data", () => {
     expect(restored.dailyPlans.free).toEqual(freePlan);
     expect(restored.dailyPlans.inventory).toEqual(inventoryPlan);
     expect(restored.activePlanningMode).toBe("inventory");
+    expect(restored.savedRecipes).toEqual([savedRecipe]);
   });
 
   it("adds Phase 2.2 defaults without overwriting existing foods or profile", () => {
@@ -180,6 +196,7 @@ describe("V3 persisted app data", () => {
     expect(restored.profile).toBe(defaultProfile);
     expect(restored.dailyPlans).toEqual({ free: null, inventory: null });
     expect(restored.activePlanningMode).toBe("free");
+    expect(restored.savedRecipes).toEqual([]);
     expect(restored.recentFoodIds).toEqual([]);
   });
 });
@@ -202,9 +219,28 @@ describe("V2 persistence migration", () => {
     }, 2);
     const otherMode: PlanningMode = expectedMode === "free" ? "inventory" : "free";
 
-    expect(APP_STORAGE_VERSION).toBe(3);
+    expect(APP_STORAGE_VERSION).toBe(4);
     expect(restored.activePlanningMode).toBe(expectedMode);
     expect(restored.dailyPlans[expectedMode]).toBe(freePlan);
     expect(restored.dailyPlans[otherMode]).toBeNull();
+  });
+});
+
+describe("V3 persistence migration", () => {
+  it("preserves both plan slots and active mode while adding an empty Saved Recipes list", () => {
+    const restored = migratePersistedAppData({
+      profile: defaultProfile,
+      foods: initialUserFoods,
+      dailyPlans: { free: freePlan, inventory: inventoryPlan },
+      activePlanningMode: "inventory",
+      recentFoodIds: ["starter-egg"],
+      recentRecipeTemplateIds: ["egg-snack"],
+    }, 3);
+
+    expect(restored.dailyPlans).toEqual({ free: freePlan, inventory: inventoryPlan });
+    expect(restored.activePlanningMode).toBe("inventory");
+    expect(restored.savedRecipes).toEqual([]);
+    expect(restored.foods).toBe(initialUserFoods);
+    expect(restored.profile).toBe(defaultProfile);
   });
 });

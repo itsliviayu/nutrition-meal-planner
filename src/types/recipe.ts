@@ -1,6 +1,6 @@
 import type { FoodCategory, FoodTag } from "./food";
 import type { MealItem, MealType } from "./meal";
-import type { Nutrition } from "./nutrition";
+import type { Nutrition, ServingUnit } from "./nutrition";
 import type { Equipment } from "./profile";
 
 export interface RecipeSlot {
@@ -20,7 +20,61 @@ export interface RecipeTemplate {
   cookingTime: number;
   equipment: Equipment[];
   slots: RecipeSlot[];
+  nameRule: RecipeNameRule;
+  instructionSteps: RecipeInstructionStep[];
   tags: string[];
+}
+
+export interface RecipeNameRule {
+  ingredientSlotIds: string[];
+  suffix: string;
+  maxIngredients: number;
+}
+
+export interface RecipeInstructionStep {
+  text: string;
+  whenSlotsPresent?: string[];
+}
+
+export interface RecipeIngredientSnapshot {
+  foodId: string;
+  foodName: string;
+  amount: number;
+  unit: ServingUnit;
+}
+
+export interface GeneratedRecipeIngredient extends RecipeIngredientSnapshot {
+  category: FoodCategory;
+  inStock: boolean;
+  locked: boolean;
+  slotId?: string;
+}
+
+export interface GeneratedRecipe {
+  name: string;
+  sourceTemplateId: string;
+  mealType: MealType;
+  ingredients: GeneratedRecipeIngredient[];
+  cookingTime: number;
+  equipment: Equipment[];
+  instructions: string[];
+  nutrition: Nutrition;
+  fibreDataComplete: boolean;
+}
+
+export interface SavedRecipe {
+  id: string;
+  name: string;
+  sourceTemplateId: string;
+  mealType: MealType;
+  ingredients: RecipeIngredientSnapshot[];
+  cookingTime: number;
+  equipment: Equipment[];
+  instructions: string[];
+  nutrition: Nutrition;
+  fibreDataComplete: boolean;
+  createdAt: string;
+  updatedAt?: string;
 }
 
 export interface GeneratorPreferences {

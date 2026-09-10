@@ -19,4 +19,28 @@ describe("recipeTemplates", () => {
       }
     }
   });
+
+  it("provides concise deterministic instructions and naming rules for every template", () => {
+    for (const template of recipeTemplates) {
+      expect(template.instructionSteps.length).toBeGreaterThanOrEqual(2);
+      expect(template.instructionSteps.length).toBeLessThanOrEqual(6);
+      expect(template.nameRule.maxIngredients).toBeGreaterThan(0);
+      const slotIds = new Set(template.slots.map((slot) => slot.id));
+      for (const slotId of template.nameRule.ingredientSlotIds) expect(slotIds.has(slotId)).toBe(true);
+      for (const step of template.instructionSteps) {
+        const placeholders = [...step.text.matchAll(/\{([^}]+)\}/g)].map((match) => match[1]);
+        for (const slotId of [...placeholders, ...(step.whenSlotsPresent ?? [])]) {
+          expect(slotIds.has(slotId)).toBe(true);
+        }
+      }
+    }
+  });
+
+  it("keeps no-cook templates free from unnecessary oven, pan, boiling or frying steps", () => {
+    const noCookInstructions = recipeTemplates
+      .filter((template) => template.tags.includes("no_cook"))
+      .flatMap((template) => template.instructionSteps.map((step) => step.text))
+      .join(" ");
+    expect(noCookInstructions).not.toMatch(/\b(oven|pan|boil|fry)\b/i);
+  });
 });

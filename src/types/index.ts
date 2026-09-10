@@ -5,8 +5,14 @@ export type { Equipment, Goal, TargetRange, UserProfile } from "./profile";
 export type {
   GeneratorConstraints,
   GeneratorPreferences,
+  GeneratedRecipe,
+  GeneratedRecipeIngredient,
   MealCandidate,
   MealNutritionTarget,
+  RecipeIngredientSnapshot,
+  RecipeInstructionStep,
+  RecipeNameRule,
   RecipeSlot,
   RecipeTemplate,
+  SavedRecipe,
 } from "./recipe";

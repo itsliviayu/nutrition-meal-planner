@@ -5,6 +5,7 @@ interface MealCardProps {
   meal: MealPlan;
   foods: Food[];
   onRegenerate: () => void;
+  onOpenRecipe: () => void;
   onToggleLock: (foodId: string) => void;
   onUpdatePortion: (foodId: string, amount: number) => void;
 }
@@ -50,7 +51,7 @@ function PortionInput({
   );
 }
 
-export function MealCard({ meal, foods, onRegenerate, onToggleLock, onUpdatePortion }: MealCardProps) {
+export function MealCard({ meal, foods, onRegenerate, onOpenRecipe, onToggleLock, onUpdatePortion }: MealCardProps) {
   const [editingPortions, setEditingPortions] = useState(false);
   const equipment = meal.equipment.length ? meal.equipment.join(" · ") : "No special equipment";
 
@@ -94,6 +95,7 @@ export function MealCard({ meal, foods, onRegenerate, onToggleLock, onUpdatePort
       <footer className="meal-card__footer">
         <span>{equipment}</span>
         <div>
+          <button className="meal-action" type="button" onClick={onOpenRecipe}>Recipe</button>
           <button className="meal-action" type="button" aria-pressed={editingPortions} onClick={() => setEditingPortions((value) => !value)}>
             {editingPortions ? "Done" : "Edit portions"}
           </button>
