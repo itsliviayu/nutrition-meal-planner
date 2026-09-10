@@ -56,6 +56,7 @@ export default function App() {
         onSelectReference={(id) => { setSelectedReferenceFoodId(id); setRoute("confirm-food"); window.scrollTo({ top: 0, behavior: "smooth" }); }}
         onAddCustom={() => navigate("custom-food")}
         onViewExisting={(id) => { setEditingFoodId(id); setRoute("edit-food"); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+        onMultiAddComplete={() => navigate("foods")}
       />
     );
   } else if (route === "confirm-food") {

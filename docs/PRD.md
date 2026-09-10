@@ -440,6 +440,8 @@ Reference Food：
 
 用户个人Food Library中的食品记录。
 
+产品中的Food Library页面展示的是**My Foods / User Food Library**，不是系统完整的Reference Food Library。`In Stock`只是每条User Food上的当前库存状态，不是独立的第三个Food Library。
+
 User Food可以：
 
 * 从Reference Food复制创建
@@ -596,6 +598,28 @@ nutritionSource = reference
 * View existing food
 * Add anyway
 
+### Select multiple
+
+Common Foods同时支持轻量的批量加入模式：
+
+```text
+Food Library
+→ Add Food
+→ Common Food Search
+→ Select multiple
+→ Add N to My Foods
+```
+
+多选继续复用相同的Reference Food名称、alias、大小写不敏感和部分匹配搜索。已经存在于My Foods中的Reference Food显示为`Already added`，且在批量模式下不可再次选择。
+
+批量保存时，每个选中项都通过统一factory创建独立User Food copy，并保留`referenceFoodId`、reference nutrition和来源元数据。批量加入表示“用户愿意吃、会买、允许用于未来规划”，不表示这些食品当前都在家中，因此默认：
+
+```text
+inStock = false
+```
+
+批量添加不增加额外确认页面；原有单个`Search → Select → Confirm`流程和确认页状态设置保持不变。
+
 ## 9.2 Packaged / Custom Food Manual Entry
 
 Common Food搜索结果下方提供次要入口：
@@ -734,7 +758,7 @@ AI识别结果不能直接静默保存。
 
 # 11. Inventory 食品库存
 
-Food Library中的食品可设置：
+Food Library即My Foods / User Food Library，其中的食品可设置：
 
 ### In Stock
 
@@ -748,19 +772,19 @@ Food Library中的食品可设置：
 
 整个个人数据库。
 
-V1库存状态仍然只是`inStock = true / false`。不记录package size、剩余重量、包装数量或使用后的自动扣减。
+Inventory不是独立的第三个Food Library。它只是User Food上的`inStock = true / false`状态。V1不记录package size、剩余重量、包装数量，也不在生成餐食后自动扣减库存。
 
 ---
 
-用户随机生成菜单时可以开启：
+Reference Food进入规划池的唯一方式是先通过Quick Add或Multi Add创建User Food：
 
-**Use ingredients I already have**
-
-开启后：
-
-Hard Constraint：
-
-> 生成餐食优先只使用 `inStock = true` 食材。
+```text
+Reference Food Library
+→ Quick Add / Multi Add
+→ My Foods / User Food Library
+→ In Stock status
+→ Meal Generator
+```
 
 ---
 
@@ -972,7 +996,8 @@ Sauce
 * Allergy food不得出现
 * Equipment必须可完成
 * Cooking time不得明显超过限制
-* Inventory Only开启时不得使用缺货食材
+* Use What I Have开启时不得使用`inStock = false`的User Food
+* 任何Planning Mode都不得直接使用未加入My Foods的Reference Food
 * 营养目标不能严重偏离
 
 ---
@@ -1694,11 +1719,11 @@ Evening Snack
 
 ### 2. Food Library
 
-食品数据库 + 库存。
+My Foods / User Food Library；库存通过每条User Food的In Stock状态表达，不创建第三套食品库。
 
 ### 3. Add/Edit Food
 
-Common Food通过Search → Select → Confirm快速加入；Packaged / Custom Food使用完整营养表单；已有User Food可以继续编辑。
+Common Food通过Search → Select → Confirm快速加入，也可使用Select multiple批量创建默认非库存的User Food copies；Packaged / Custom Food使用完整营养表单；已有User Food可以继续编辑。
 
 ### 4. Recipes
 

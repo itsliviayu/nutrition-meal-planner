@@ -40,7 +40,7 @@ export function FoodsPage({ onAdd, onEdit }: FoodsPageProps) {
   return (
     <>
       <section className="intro-copy">
-        <p>Your flexible food library and what is currently at home.</p>
+        <p>Foods you eat and plan with. Mark what’s currently at home as In Stock.</p>
         <span>{foods.length} foods · {foods.filter((food) => food.inStock).length} in stock</span>
       </section>
 

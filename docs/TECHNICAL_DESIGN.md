@@ -274,7 +274,19 @@ Manual estimate entry
 
 创建出的User Food拥有新的`id`并保存原始`referenceFoodId`。两者不能共享可变对象引用，确保编辑User Food不会污染reference data。
 
-未来Meal Generator的数据边界固定为Zustand中的User Food Library，不允许直接把Reference Food目录当作可生成食材。
+Foods页面读取和展示的是Zustand中的My Foods / User Food Library。`inStock`是User Food的布尔状态，不是独立集合，也不创建第三个Food Library。
+
+数据流固定为：
+
+```text
+Reference Food Library
+→ Quick Add / Multi Add
+→ My Foods / User Food Library
+→ optional inStock filter
+→ Meal Generator
+```
+
+Meal Generator的数据边界固定为Zustand中的User Food Library，不允许直接把Reference Food目录当作可生成食材。
 
 ## 4.2 Nutrition Source
 
@@ -854,6 +866,18 @@ Shrimp
 Beef
 Salmon
 Tofu
+```
+
+候选池的输入始终是User Foods。Planning Mode只控制是否应用`inStock`过滤：
+
+```text
+Plan Freely
+inventoryOnly = false
+→ all User Foods
+
+Use What I Have
+inventoryOnly = true
+→ User Foods where inStock = true
 ```
 
 如果：
@@ -1639,6 +1663,26 @@ referenceFoodId
 ```
 
 命中时显示View existing food与Add anyway，不静默创建重复项。
+
+### Select multiple
+
+Common Foods标题区域提供轻量的`Select multiple`入口。进入多选状态后，搜索和排序仍由同一个Reference Food搜索模块负责；结果使用checkbox或等价选择状态，底部显示`Add N to My Foods` sticky action。
+
+批量创建必须调用统一的Reference → User Food factory，并遵守：
+
+```text
+new User Food id
+referenceFoodId = Reference Food id
+nutrition / tags / compatibleMeals使用独立copy
+保留reference source metadata
+inStock = false
+regularBuy = false
+favourite = false
+```
+
+批量提交前再次以`referenceFoodId`或规范化name检查当前User Food Library，跳过已存在或同一批次重复的Reference Food。UI中的已存在项显示`Already added`并禁用；Multi Add不提供`Add anyway`。
+
+该流程直接写入同一个Zustand `foods`数组，不创建新的reference selection store、inventory collection或第三套Food Library。单个添加仍使用原有Search → Select → Confirm流程。
 
 ## Packaged / Custom Food
 

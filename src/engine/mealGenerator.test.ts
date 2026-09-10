@@ -90,6 +90,26 @@ describe("mealGenerator hard constraints", () => {
     }
   });
 
+  it("can use out-of-stock User Foods when planning freely", () => {
+    const foods = lunchFoods().map((item) => ({
+      ...item,
+      inStock: item.category !== "protein",
+    }));
+    const result = generateMeal({
+      foods,
+      constraints: constraints({ inventoryOnly: false }),
+      target,
+      templates: [template()],
+      random: () => 0,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      const usedFoods = result.meal.items.map((item) => foods.find((foodItem) => foodItem.id === item.foodId));
+      expect(usedFoods.some((item) => item?.inStock === false)).toBe(true);
+    }
+  });
+
   it("never includes excluded foods", () => {
     const result = generateMeal({ foods: lunchFoods(), constraints: constraints({ excludedFoodIds: ["protein-a"] }), target, templates: [template()], random: () => 0 });
     expect(result.ok).toBe(true);

@@ -177,6 +177,8 @@ button, label { -webkit-tap-highlight-color: transparent; }
 .list-heading { display: flex; align-items: baseline; justify-content: space-between; padding: 0 2px; }
 .list-heading h2 { margin: 0; font-size: .75rem; letter-spacing: .08em; text-transform: uppercase; }
 .list-heading span { color: var(--muted); font-size: .7rem; }
+.list-heading__actions { display: flex; align-items: center; gap: 7px; }
+.list-heading__actions .text-button { padding-inline: 2px; font-size: .72rem; font-weight: 700; }
 .reference-list { overflow: hidden; border: 1px solid var(--line); border-radius: 18px; background: var(--paper); box-shadow: 0 6px 24px rgb(52 65 56 / 4%); }
 .reference-food-row { display: grid; width: 100%; min-height: 72px; grid-template-columns: auto minmax(0, 1fr) auto auto; align-items: center; gap: 11px; padding: 11px 14px; border: 0; border-bottom: 1px solid #e9ebe6; background: transparent; text-align: left; cursor: pointer; }
 .reference-food-row:last-child { border-bottom: 0; }
@@ -195,6 +197,14 @@ button, label { -webkit-tap-highlight-color: transparent; }
 .reference-food-row__nutrition { display: flex; flex-direction: column; align-items: flex-end; color: var(--ink); font-size: .8rem; font-weight: 700; }
 .reference-food-row__nutrition small { margin-top: 2px; color: var(--muted); font-size: .6rem; font-weight: 500; }
 .reference-food-row__arrow { color: #9ba59d; font-size: 1.35rem; }
+.reference-food-row--selectable { cursor: pointer; }
+.reference-food-row--selectable.is-selected { background: #f1f5ee; }
+.reference-food-row--selectable.is-disabled { background: #f8f8f4; color: #899189; cursor: default; }
+.reference-food-checkbox { width: 19px; height: 19px; margin: 0 10px; accent-color: var(--leaf-dark); }
+.reference-food-row__selection { min-width: 35px; color: var(--leaf-dark); font-size: .62rem; font-weight: 750; text-align: right; }
+.multi-add-bar { position: sticky; z-index: 15; bottom: 14px; display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 11px 12px 11px 15px; border: 1px solid #b9c9b9; border-radius: 16px; background: rgb(255 254 250 / 96%); box-shadow: 0 10px 30px rgb(36 54 41 / 16%); backdrop-filter: blur(14px); }
+.multi-add-bar > span { color: var(--muted); font-size: .7rem; white-space: nowrap; }
+.multi-add-bar .primary-button { min-height: 42px; }
 .common-empty { display: flex; min-height: 130px; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 24px; text-align: center; }
 .common-empty strong { font-family: Georgia, serif; font-weight: 500; }
 .common-empty span { max-width: 330px; color: var(--muted); font-size: .72rem; line-height: 1.5; }
@@ -263,6 +273,7 @@ button, label { -webkit-tap-highlight-color: transparent; }
 .form-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 6px 0 12px; }
 .primary-button, .secondary-button, .danger-button { min-height: 44px; padding: 0 16px; border-radius: 12px; font-weight: 700; cursor: pointer; }
 .primary-button { border: 1px solid var(--leaf-dark); background: var(--leaf-dark); color: white; }
+.primary-button:disabled { border-color: #bdc4bd; background: #bdc4bd; cursor: not-allowed; }
 .secondary-button { border: 1px solid var(--line); background: var(--paper); color: #566158; }
 .danger-button { margin-right: auto; border: 1px solid #ead5cf; background: #faf2ef; color: var(--warning); }
 .form-errors { padding: 14px 16px; border: 1px solid #ead5cf; border-radius: 13px; background: #faf2ef; color: #78493c; font-size: .75rem; }
@@ -387,6 +398,9 @@ button, label { -webkit-tap-highlight-color: transparent; }
   .portion-control { gap: 2px; }
   .portion-control > button { width: 25px; }
   .portion-control input { width: 57px; }
+  .multi-add-bar { align-items: stretch; flex-direction: column; gap: 7px; }
+  .multi-add-bar .primary-button { width: 100%; }
+  .list-heading__actions > span { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {

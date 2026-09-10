@@ -1,4 +1,5 @@
 import type { Food, ReferenceFood } from "../types";
+import { createId } from "../utils/id";
 
 interface ReferenceFoodOverrides {
   id: string;
@@ -35,3 +36,26 @@ export const findReferenceDuplicate = (
   food.referenceFoodId === referenceFood.id
   || normalizedFoodName(food.name) === normalizedFoodName(referenceFood.name),
 );
+
+export const createUserFoodsFromReferences = (
+  references: ReferenceFood[],
+  existingFoods: Food[],
+  idFactory: () => string = createId,
+): Food[] => {
+  const library = [...existingFoods];
+  const additions: Food[] = [];
+
+  for (const reference of references) {
+    if (findReferenceDuplicate(library, reference)) continue;
+    const userFood = createUserFoodFromReference(reference, {
+      id: idFactory(),
+      inStock: false,
+      regularBuy: false,
+      favourite: false,
+    });
+    additions.push(userFood);
+    library.push(userFood);
+  }
+
+  return additions;
+};
