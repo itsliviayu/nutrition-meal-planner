@@ -1,11 +1,25 @@
+import { useRef, type PointerEvent as ReactPointerEvent } from "react";
 import { MealCard } from "../components/MealCard";
 import { NutritionSummary } from "../components/NutritionSummary";
-import { useAppStore } from "../stores/useAppStore";
+import { selectActiveDailyPlan, useAppStore } from "../stores/useAppStore";
 import type { MealType } from "../types";
+import type { PlanningMode } from "../utils/planningMode";
 
 interface TodayPageProps {
   onOpenFoods: () => void;
 }
+
+interface SwipeStart {
+  pointerId: number;
+  x: number;
+  y: number;
+}
+
+const SWIPE_THRESHOLD = 64;
+const SWIPE_AXIS_RATIO = 1.35;
+
+const isInteractiveTarget = (target: EventTarget | null): boolean =>
+  target instanceof Element && Boolean(target.closest("button, input, select, textarea, a, [role='button']"));
 
 const displayDate = (dateKey?: string): string => {
   const date = dateKey ? new Date(`${dateKey}T12:00:00`) : new Date();
@@ -16,18 +30,75 @@ const displayDate = (dateKey?: string): string => {
   }).format(date);
 };
 
+function PlanningModeControl({
+  mode,
+  onChange,
+}: {
+  mode: PlanningMode;
+  onChange: (mode: PlanningMode) => void;
+}) {
+  return (
+    <fieldset className="planning-mode">
+      <legend className="sr-only">Planning mode</legend>
+      <div>
+        <button
+          type="button"
+          className={mode === "free" ? "is-active" : ""}
+          aria-pressed={mode === "free"}
+          onClick={() => onChange("free")}
+        >
+          Plan Freely
+        </button>
+        <button
+          type="button"
+          className={mode === "inventory" ? "is-active" : ""}
+          aria-pressed={mode === "inventory"}
+          onClick={() => onChange("inventory")}
+        >
+          Use What I Have
+        </button>
+      </div>
+    </fieldset>
+  );
+}
+
 export function TodayPage({ onOpenFoods }: TodayPageProps) {
   const profile = useAppStore((state) => state.profile);
   const foods = useAppStore((state) => state.foods);
-  const dailyPlan = useAppStore((state) => state.dailyPlan);
-  const inventoryOnly = useAppStore((state) => state.inventoryOnly);
+  const dailyPlan = useAppStore(selectActiveDailyPlan);
+  const activePlanningMode = useAppStore((state) => state.activePlanningMode);
   const generationMessage = useAppStore((state) => state.generationMessage);
-  const setInventoryOnly = useAppStore((state) => state.setInventoryOnly);
+  const setActivePlanningMode = useAppStore((state) => state.setActivePlanningMode);
   const generateDailyPlan = useAppStore((state) => state.generateDailyPlan);
   const regenerateMeal = useAppStore((state) => state.regenerateMeal);
   const toggleMealItemLock = useAppStore((state) => state.toggleMealItemLock);
   const updateMealItemPortion = useAppStore((state) => state.updateMealItemPortion);
   const clearGenerationMessage = useAppStore((state) => state.clearGenerationMessage);
+  const swipeStart = useRef<SwipeStart | null>(null);
+
+  const startPlanningModeSwipe = (event: ReactPointerEvent<HTMLDivElement>) => {
+    if (!event.isPrimary || event.button !== 0 || isInteractiveTarget(event.target)) return;
+    swipeStart.current = {
+      pointerId: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+    };
+  };
+
+  const finishPlanningModeSwipe = (event: ReactPointerEvent<HTMLDivElement>) => {
+    const start = swipeStart.current;
+    swipeStart.current = null;
+    if (!start || start.pointerId !== event.pointerId) return;
+
+    const horizontalDistance = event.clientX - start.x;
+    const verticalDistance = event.clientY - start.y;
+    if (
+      Math.abs(horizontalDistance) < SWIPE_THRESHOLD
+      || Math.abs(horizontalDistance) < Math.abs(verticalDistance) * SWIPE_AXIS_RATIO
+    ) return;
+
+    setActivePlanningMode(horizontalDistance < 0 ? "inventory" : "free");
+  };
 
   const renderMeal = (mealType: MealType) => {
     if (!dailyPlan) return null;
@@ -50,10 +121,6 @@ export function TodayPage({ onOpenFoods }: TodayPageProps) {
           <p className="today-date">{displayDate(dailyPlan?.date)}</p>
           <p>{dailyPlan ? "A flexible plan built from your food library." : "Let your food library take the thinking out of today."}</p>
         </div>
-        <label className="inventory-switch">
-          <input type="checkbox" checked={inventoryOnly} onChange={(event) => setInventoryOnly(event.target.checked)} />
-          <span>In-stock only</span>
-        </label>
       </section>
 
       {generationMessage && (
@@ -66,24 +133,35 @@ export function TodayPage({ onOpenFoods }: TodayPageProps) {
         </section>
       )}
 
-      {dailyPlan ? (
-        <>
-          <NutritionSummary plan={dailyPlan} profile={profile} />
+      <div
+        className="planning-surface"
+        onPointerDown={startPlanningModeSwipe}
+        onPointerUp={finishPlanningModeSwipe}
+        onPointerCancel={() => { swipeStart.current = null; }}
+      >
+        <div className={`planning-overview${dailyPlan ? " planning-overview--with-summary" : ""}`}>
+          <PlanningModeControl mode={activePlanningMode} onChange={setActivePlanningMode} />
+          {dailyPlan && <NutritionSummary plan={dailyPlan} profile={profile} />}
+        </div>
+
+        {dailyPlan ? (
           <section className="daily-meals" aria-label="Today's meals">
             {renderMeal("breakfast")}
             {renderMeal("lunch")}
             {renderMeal("snack")}
           </section>
-        </>
-      ) : (
-        <section className="today-empty">
-          <div className="today-empty__art" aria-hidden="true"><span>○</span><span>△</span><span>□</span></div>
-          <p className="section-kicker">Breakfast · Lunch · Evening snack</p>
-          <h2>Make room for a good day</h2>
-          <p>We'll combine foods you own into three practical meals, then balance the day around your personal targets.</p>
-          <button className="primary-button generate-button" type="button" onClick={generateDailyPlan}>Generate My Day</button>
-        </section>
-      )}
+        ) : (
+          <section className="today-empty">
+            <div className="today-empty__art" aria-hidden="true"><span>○</span><span>△</span><span>□</span></div>
+            <p className="section-kicker">{activePlanningMode === "free" ? "Plan Freely" : "Use What I Have"}</p>
+            <h2>No plan for this mode yet</h2>
+            <p>{activePlanningMode === "free"
+              ? "Generate a balanced day using all foods in My Foods."
+              : "Generate a balanced day using foods currently marked In Stock."}</p>
+            <button className="primary-button generate-button" type="button" onClick={generateDailyPlan}>Generate My Day</button>
+          </section>
+        )}
+      </div>
 
       {dailyPlan && (
         <section className="generate-panel">

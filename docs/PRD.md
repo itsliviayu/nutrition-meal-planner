@@ -896,6 +896,70 @@ Evening Snack
 
 系统应从**整日营养目标**反推三餐组合。
 
+## Planning Mode
+
+Today的Nutrition Overview上方提供两个互斥模式：
+
+### Plan Freely
+
+使用全部My Foods / User Foods，包括`inStock = true`和`inStock = false`：
+
+```text
+inventoryOnly = false
+```
+
+Plan Freely只扩大到用户已经认可并加入My Foods的食品，绝不直接从Reference Food Library生成。
+
+### Use What I Have
+
+只使用My Foods中当前`inStock = true`的食品：
+
+```text
+inventoryOnly = true
+```
+
+这是Meal Generator已有库存Hard Constraint的用户界面表达，不创建第二套Generator。
+
+`Plan Freely`是默认模式。Phase 2.1曾以`inventoryOnly`持久化模式选择；Phase 2.2按下述双DailyPlan模型升级。
+
+### Phase 2.2 — Mode-specific Daily Plans
+
+Today为同一天维护两份互相独立的DailyPlan：
+
+```text
+dailyPlans.free
+→ Plan Freely的DailyPlan
+
+dailyPlans.inventory
+→ Use What I Have的DailyPlan
+```
+
+当前展示模式由以下状态决定：
+
+```text
+activePlanningMode = "free" | "inventory"
+```
+
+点击顶部mode或左右swipe时，只切换`activePlanningMode`并展示`dailyPlans[activePlanningMode]`。切换本身不得自动regenerate、覆盖另一模式的plan、删除另一模式的plan，或重置其中的lock与portion edits。
+
+`Generate My Day`只重新生成当前active mode对应的DailyPlan：
+
+```text
+activePlanningMode = "free"
+→ inventoryOnly = false
+→ 写入dailyPlans.free
+
+activePlanningMode = "inventory"
+→ inventoryOnly = true
+→ 写入dailyPlans.inventory
+```
+
+单餐regenerate、lock / unlock与portion edit同样只作用于当前active mode的plan，另一模式的plan必须保持不变。
+
+如果`dailyPlans[activePlanningMode]`尚未生成，Today显示该模式的empty state和`Generate My Day`操作，不自动创建plan。
+
+`Explore / Try Something New`不属于Meal Generator，也不是第三个Planning Mode。它留到Shopping / Discovery阶段，用于从尚未加入My Foods的Reference Foods中发现新选择。
+
 ---
 
 # 15. Meal Generator
@@ -1782,12 +1846,32 @@ V1：
 当前持久化schema版本：
 
 ```text
-V2
+V3
 ```
 
 V2增加`referenceFoodId`和`nutritionSource`，并支持将Phase 1已保存的Food数据自动迁移，不清空或覆盖用户已有食品。
 
 Phase 1.2新增的`aliases`和reference source字段为可选元数据，因此persist版本保持V2，不需要新的localStorage migration。Reference Food目录扩展只影响静态搜索源和全新安装的starter foods。
+
+Phase 2.1继续复用已持久化的`foods`和`inventoryOnly`。Multi Add仍向同一个User Food数组添加记录；Planning Mode只是`inventoryOnly`的UI映射，因此不改变persist版本，也不需要migration。
+
+Phase 2.2将单个`dailyPlan`与`inventoryOnly`升级为`dailyPlans.free`、`dailyPlans.inventory`和`activePlanningMode`，因此persist版本从V2升级为V3。
+
+V2 → V3 migration：
+
+```text
+inventoryOnly = false
+→ activePlanningMode = "free"
+→ 旧dailyPlan迁移到dailyPlans.free
+→ dailyPlans.inventory = null
+
+inventoryOnly = true
+→ activePlanningMode = "inventory"
+→ 旧dailyPlan迁移到dailyPlans.inventory
+→ dailyPlans.free = null
+```
+
+迁移必须保留旧DailyPlan，不清空或覆盖用户已有Food、Profile与其他持久化数据。
 
 保存：
 
@@ -1795,7 +1879,8 @@ Phase 1.2新增的`aliases`和reference source字段为可选元数据，因此p
 * Foods
 * Inventory
 * Recipes
-* Today Plan
+* 两个mode-specific Today Plans
+* Active Planning Mode
 * Settings
 
 暂时不需要：

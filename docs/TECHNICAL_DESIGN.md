@@ -544,6 +544,30 @@ interface DailyPlan {
 }
 ```
 
+Phase 2.2在同一天的Today state中保存两个互相独立的DailyPlan slot：
+
+```ts
+type PlanningMode = "free" | "inventory";
+
+interface ModeDailyPlans {
+  free: DailyPlan | null;
+  inventory: DailyPlan | null;
+}
+
+interface DailyPlanState {
+  dailyPlans: ModeDailyPlans;
+  activePlanningMode: PlanningMode;
+}
+```
+
+当前页面只读取：
+
+```ts
+dailyPlans[activePlanningMode]
+```
+
+一个slot为`null`不影响另一个slot。UI应显示该mode的empty state，并等待用户主动执行`Generate My Day`。
+
 ---
 
 # 11. 目标状态
@@ -891,6 +915,17 @@ inventoryOnly = true
 ```text
 inStock = true
 ```
+
+两种模式都不得直接读取Reference Food Library。`Plan Freely`表示使用全部My Foods，不表示探索系统认识的全部食品。`Explore / Try Something New`留到Shopping / Discovery阶段，不作为Meal Generator模式实现。
+
+Phase 2.2中，`inventoryOnly`仍是Generator constraint，不再是Today当前模式的唯一持久化状态。调用Generator时由active mode确定：
+
+```text
+activePlanningMode = "free"      → inventoryOnly = false
+activePlanningMode = "inventory" → inventoryOnly = true
+```
+
+生成成功后只写入`dailyPlans[activePlanningMode]`，不得修改另一slot。Meal Generator、candidate scoring和recipe templates本身不需要为双slot模型做第二套实现。
 
 ---
 
@@ -1527,6 +1562,8 @@ Settings
 └─────────────────────────┘
 ```
 
+Phase 2.2的Today实现将`Plan Freely`与`Use What I Have`作为Nutrition Overview上方的attached tabs。点击tab或swipe只更新`activePlanningMode`，不会触发regenerate；下方Nutrition Overview与Meal Cards读取当前slot。`Generate My Day`、单餐regenerate、lock / unlock和portion edit也只更新当前slot。
+
 ---
 
 # 41. Meal Regeneration弹窗
@@ -1790,18 +1827,35 @@ useAppStore.ts
 profile
 foods
 recipes
-dailyPlan
+dailyPlans
+activePlanningMode
 ```
+
+Phase 2.2的Today相关state与action路由：
+
+```text
+dailyPlans.free: DailyPlan | null
+dailyPlans.inventory: DailyPlan | null
+activePlanningMode: "free" | "inventory"
+
+setActivePlanningMode
+→ 只更新activePlanningMode
+
+generateDailyPlan / regenerateMeal / toggleMealItemLock / updateMealItemPortion
+→ 只读取和更新dailyPlans[activePlanningMode]
+```
+
+模式切换不得隐式调用Generator，也不得覆盖、清空或重算另一模式的plan。
 
 ## localStorage持久化版本
 
 当前persist版本为：
 
 ```text
-V2
+V3
 ```
 
-V2迁移规则：
+V2最初引入的Food迁移规则继续保留：
 
 * 原Phase 1 seed food根据id关联到Reference Food，并补充`referenceFoodId`
 * 旧的estimated food映射为`manual_estimate`
@@ -1810,6 +1864,31 @@ V2迁移规则：
 * 不清空localStorage
 
 Phase 1.2的`aliases`与`referenceSourceName` / `referenceSourceId` / `referenceSourceUrl`是可选Food元数据，persist版本继续使用V2。扩展静态Reference Food目录不触发store迁移，也不会把新的starter foods合并进已有用户库。15个starter User Foods只用于没有持久化状态的首次初始化。
+
+Phase 2.1不改变persist schema：Multi Add继续保存到`foods`，Planning Mode继续保存为现有`inventoryOnly: boolean`。
+
+```text
+false → Plan Freely
+true  → Use What I Have
+```
+
+因此Phase 2.1时persist版本仍为V2，不需要新的migration。
+
+Phase 2.2因引入两个mode-specific plan slot而升级为V3。V2 → V3 migration规则：
+
+```text
+inventoryOnly = false
+→ activePlanningMode = "free"
+→ dailyPlans.free = 旧dailyPlan
+→ dailyPlans.inventory = null
+
+inventoryOnly = true
+→ activePlanningMode = "inventory"
+→ dailyPlans.inventory = 旧dailyPlan
+→ dailyPlans.free = null
+```
+
+迁移必须保留旧`dailyPlan`以及既有Profile、User Foods和recent history。迁移后刷新应同时恢复`dailyPlans.free`、`dailyPlans.inventory`与`activePlanningMode`。
 
 ---
 
@@ -1937,6 +2016,39 @@ Phase 1.2不增加运行时API、Meal Generator、Recipe Template、Shopping或�
 * Daily Nutrition Summary
 * Lock & Regenerate
 * Portion editing
+
+---
+
+### Phase 2.1 — Planning Pool UX
+
+已完成：
+
+* Foods页面明确表示My Foods / User Food Library
+* In Stock保持为User Food状态，不拆分第三套食品库
+* Common Foods支持Select multiple并批量创建独立User Food copies
+* 批量加入默认`inStock = false`，已存在项不可重复选择
+* Today以Plan Freely / Use What I Have映射现有`inventoryOnly`
+* Plan Freely使用全部User Foods，Use What I Have只使用in-stock User Foods
+* 两种模式都不允许Meal Generator直接读取Reference Foods
+* V2持久化结构保持不变，无需migration
+
+Phase 2.1不实现精确库存数量、自动扣减、Explore / Try Something New、Shopping或Phase 3功能。Explore / Try Something New留到Shopping / Discovery阶段。
+
+---
+
+### Phase 2.2 — Mode-specific Daily Plans
+
+已完成：
+
+* Today为Plan Freely和Use What I Have分别保存独立DailyPlan
+* `activePlanningMode`决定当前展示与操作的plan slot
+* tab点击与swipe只切换展示，不自动regenerate
+* Generate My Day只覆盖当前active mode
+* 单餐regenerate、lock / unlock与portion edit只修改当前active mode
+* 未生成的mode显示empty state，不自动生成
+* localStorage升级为V3，并安全迁移V2的`dailyPlan`与`inventoryOnly`
+
+Phase 2.2不修改Meal Generator、candidate scoring、recipe templates、nutrition algorithm、Reference/User Food关系，也不开始Phase 3。
 
 ---
 

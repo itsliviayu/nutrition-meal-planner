@@ -296,10 +296,15 @@ button, label { -webkit-tap-highlight-color: transparent; }
 .today-intro p { margin: 0; }
 .today-intro > div > p:last-child { max-width: 410px; margin-top: 5px; color: var(--muted); font-family: Georgia, serif; font-size: .95rem; line-height: 1.45; }
 .today-date { color: var(--leaf); font-size: .72rem; font-weight: 750; letter-spacing: .08em; text-transform: uppercase; }
-.inventory-switch { position: relative; flex: 0 0 auto; }
-.inventory-switch input { position: absolute; opacity: 0; }
-.inventory-switch span { display: block; padding: 9px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); color: var(--muted); font-size: .7rem; cursor: pointer; }
-.inventory-switch input:checked + span { border-color: #aec5b2; background: var(--leaf-pale); color: var(--leaf-dark); font-weight: 700; }
+.planning-surface { display: grid; gap: 18px; touch-action: pan-y; }
+.planning-overview { display: grid; }
+.planning-mode { width: 100%; min-width: 0; margin: 0; padding: 6px; border: 1px solid var(--line); border-radius: 21px; background: #eeefe8; text-align: left; box-shadow: 0 5px 18px rgb(52 65 56 / 3%); }
+.planning-overview--with-summary .planning-mode { position: relative; z-index: 1; padding-bottom: 5px; border-bottom: 0; border-radius: 21px 21px 0 0; }
+.planning-mode > div { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 5px; }
+.planning-mode button { min-height: 48px; padding: 0 14px; border: 1px solid transparent; border-radius: 15px; background: transparent; color: #707971; font-size: .78rem; font-weight: 720; white-space: nowrap; cursor: pointer; transition: background-color 160ms ease-out, border-color 160ms ease-out, color 160ms ease-out, box-shadow 160ms ease-out; }
+.planning-mode button:hover { color: var(--leaf-dark); }
+.planning-mode button:focus-visible { outline: 2px solid var(--leaf); outline-offset: 2px; }
+.planning-mode button.is-active { border-color: #d9dfd7; background: var(--paper); color: var(--leaf-dark); box-shadow: 0 3px 12px rgb(48 63 52 / 9%); }
 
 .generation-notice { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 15px 16px; border: 1px solid #dedccf; border-radius: 15px; background: #f5f2e9; }
 .generation-notice strong { font-family: Georgia, serif; font-size: .92rem; font-weight: 500; }
@@ -315,12 +320,13 @@ button, label { -webkit-tap-highlight-color: transparent; }
 .generate-button { min-height: 48px; padding-inline: 21px; border-radius: 999px; }
 
 .daily-nutrition { padding: 18px; border: 1px solid var(--line); border-radius: 21px; background: var(--paper); box-shadow: 0 8px 28px rgb(52 65 56 / 4%); }
+.planning-overview--with-summary .daily-nutrition { margin-top: -1px; border-radius: 0 0 21px 21px; }
 .daily-nutrition__heading { display: flex; align-items: end; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
 .daily-nutrition__heading h2 { margin: 5px 0 0; font-family: Georgia, serif; font-size: 1.25rem; font-weight: 500; }
 .daily-nutrition__heading > span { color: var(--muted); font-size: .65rem; }
 .daily-nutrition__grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9px; }
 .nutrition-stat { min-width: 0; padding: 13px; border-radius: 14px; background: #f5f5ef; }
-.nutrition-stat--energy { grid-column: 1 / -1; background: var(--leaf-pale); }
+.nutrition-stat--energy { background: var(--leaf-pale); }
 .nutrition-stat > span { color: var(--muted); font-size: .65rem; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; }
 .nutrition-stat > strong { display: block; margin-top: 5px; font-family: Georgia, serif; font-size: 1.3rem; font-weight: 500; }
 .nutrition-stat--energy > strong { font-size: 1.65rem; }
@@ -369,7 +375,6 @@ button, label { -webkit-tap-highlight-color: transparent; }
   .field-grid--three { grid-template-columns: repeat(3, 1fr); }
   .field-grid--nutrition { grid-template-columns: repeat(4, 1fr); }
   .daily-nutrition__grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-  .nutrition-stat--energy { grid-column: span 2; }
 }
 
 @media (max-width: 390px) {
@@ -389,7 +394,6 @@ button, label { -webkit-tap-highlight-color: transparent; }
   .reference-food-row__nutrition { font-size: .72rem; }
   .reference-food-row__nutrition small { font-size: .56rem; }
   .today-intro { align-items: stretch; flex-direction: column; gap: 10px; }
-  .inventory-switch { align-self: flex-start; }
   .generation-notice, .generate-panel { align-items: stretch; flex-direction: column; }
   .generation-notice > div:last-child { justify-content: flex-end; }
   .generate-panel .generate-button { width: 100%; }
@@ -405,4 +409,5 @@ button, label { -webkit-tap-highlight-color: transparent; }
 
 @media (prefers-reduced-motion: reduce) {
   * { scroll-behavior: auto !important; }
+  .planning-mode button { transition: none; }
 }

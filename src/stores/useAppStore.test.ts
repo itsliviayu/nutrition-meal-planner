@@ -1,51 +1,210 @@
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { defaultProfile } from "../data/defaultProfile";
 import { initialUserFoods } from "../data/initialFoods";
-import type { DailyPlan } from "../types";
-import { normalizePersistedAppData, type PersistedAppData } from "./useAppStore";
+import type { DailyPlan, MealPlan, MealType } from "../types";
+import type { PlanningMode } from "../utils/planningMode";
+import {
+  APP_STORAGE_VERSION,
+  migratePersistedAppData,
+  normalizePersistedAppData,
+  selectActiveDailyPlan,
+  useAppStore,
+  type ModeDailyPlans,
+  type PersistedAppData,
+} from "./useAppStore";
 
-const meal = (type: "breakfast" | "lunch" | "snack") => ({
-  id: type,
+const nutrition = { calories: 0, protein: 0, carbs: 0, fat: 0, fibre: 0 };
+
+const meal = (type: MealType, label: string, withEgg = false): MealPlan => ({
+  id: `${label}-${type}`,
   type,
-  name: type,
-  items: [],
-  recipeTemplateId: `${type}-template`,
-  nutrition: { calories: 0, protein: 0, carbs: 0, fat: 0, fibre: 0 },
+  name: `${label} ${type}`,
+  items: withEgg
+    ? [{ foodId: "starter-egg", amount: 100, unit: "g", locked: false }]
+    : [],
+  recipeTemplateId: `${label}-${type}-template`,
+  nutrition,
   cookingTime: 0,
   equipment: [],
 });
 
-const dailyPlan: DailyPlan = {
+const plan = (label: string, withEgg = false): DailyPlan => ({
   date: "2026-09-10",
-  breakfast: meal("breakfast"),
-  lunch: meal("lunch"),
-  snack: meal("snack"),
-  totalNutrition: { calories: 0, protein: 0, carbs: 0, fat: 0, fibre: 0 },
+  breakfast: meal("breakfast", label, withEgg),
+  lunch: meal("lunch", label),
+  snack: meal("snack", label),
+  totalNutrition: nutrition,
   fruitVegPortions: 0,
   nutritionStatus: { calories: "low", protein: "low", fibre: "partial", fruitVeg: "low" },
   fibreDataComplete: false,
+});
+
+const freePlan = plan("free", true);
+const inventoryPlan = plan("inventory", true);
+
+const resetStore = (dailyPlans: ModeDailyPlans = { free: null, inventory: null }) => {
+  useAppStore.setState({
+    profile: defaultProfile,
+    foods: initialUserFoods,
+    dailyPlans,
+    activePlanningMode: "free",
+    recentFoodIds: [],
+    recentRecipeTemplateIds: [],
+    generationMessage: null,
+  });
 };
 
-describe("V2 persisted app data", () => {
-  it("restores a saved DailyPlan after a JSON round trip", () => {
+beforeEach(() => resetStore());
+
+describe("mode-specific DailyPlan state", () => {
+  it("switches from free to inventory without changing either plan", () => {
+    resetStore({ free: freePlan, inventory: inventoryPlan });
+    const before = useAppStore.getState().dailyPlans;
+
+    useAppStore.getState().setActivePlanningMode("inventory");
+
+    const after = useAppStore.getState();
+    expect(after.activePlanningMode).toBe("inventory");
+    expect(after.dailyPlans.free).toBe(before.free);
+    expect(after.dailyPlans.inventory).toBe(before.inventory);
+  });
+
+  it("switches from inventory to free without changing either plan", () => {
+    resetStore({ free: freePlan, inventory: inventoryPlan });
+    useAppStore.setState({ activePlanningMode: "inventory" });
+    const before = useAppStore.getState().dailyPlans;
+
+    useAppStore.getState().setActivePlanningMode("free");
+
+    const after = useAppStore.getState();
+    expect(after.activePlanningMode).toBe("free");
+    expect(after.dailyPlans.free).toBe(before.free);
+    expect(after.dailyPlans.inventory).toBe(before.inventory);
+  });
+
+  it("selects the current mode plan and returns null for an ungenerated mode", () => {
+    resetStore({ free: freePlan, inventory: null });
+    expect(selectActiveDailyPlan(useAppStore.getState())).toBe(freePlan);
+
+    useAppStore.getState().setActivePlanningMode("inventory");
+    expect(selectActiveDailyPlan(useAppStore.getState())).toBeNull();
+
+    resetStore({ free: null, inventory: inventoryPlan });
+    useAppStore.setState({ activePlanningMode: "inventory" });
+    expect(selectActiveDailyPlan(useAppStore.getState())).toBe(inventoryPlan);
+  });
+
+  it.each([
+    ["free", "inventory"],
+    ["inventory", "free"],
+  ] as const)("generates only the active %s plan", (activeMode, inactiveMode) => {
+    const inactivePlan = plan(`${inactiveMode}-existing`);
+    resetStore({
+      free: activeMode === "free" ? null : inactivePlan,
+      inventory: activeMode === "inventory" ? null : inactivePlan,
+    });
+    useAppStore.setState({ activePlanningMode: activeMode });
+
+    expect(useAppStore.getState().generateDailyPlan()).toBe(true);
+
+    const state = useAppStore.getState();
+    expect(state.dailyPlans[activeMode]).not.toBeNull();
+    expect(state.dailyPlans[inactiveMode]).toBe(inactivePlan);
+  });
+
+  it.each([
+    ["free", "inventory"],
+    ["inventory", "free"],
+  ] as const)("regenerates a meal only in the active %s plan", (activeMode, inactiveMode) => {
+    const inactivePlan = plan(`${inactiveMode}-existing`);
+    resetStore({
+      free: activeMode === "free" ? null : inactivePlan,
+      inventory: activeMode === "inventory" ? null : inactivePlan,
+    });
+    useAppStore.setState({ activePlanningMode: activeMode });
+    expect(useAppStore.getState().generateDailyPlan()).toBe(true);
+    const activePlanBefore = useAppStore.getState().dailyPlans[activeMode];
+
+    expect(useAppStore.getState().regenerateMeal("breakfast")).toBe(true);
+
+    const state = useAppStore.getState();
+    expect(state.dailyPlans[activeMode]).not.toBe(activePlanBefore);
+    expect(state.dailyPlans[inactiveMode]).toBe(inactivePlan);
+  });
+
+  it("updates a portion only in the active plan", () => {
+    resetStore({ free: freePlan, inventory: inventoryPlan });
+
+    useAppStore.getState().updateMealItemPortion("breakfast", "starter-egg", 120);
+
+    const state = useAppStore.getState();
+    expect(state.dailyPlans.free?.breakfast.items[0].amount).toBe(120);
+    expect(state.dailyPlans.inventory).toBe(inventoryPlan);
+    expect(state.dailyPlans.inventory?.breakfast.items[0].amount).toBe(100);
+  });
+
+  it("toggles an item lock only in the active plan", () => {
+    resetStore({ free: freePlan, inventory: inventoryPlan });
+    useAppStore.setState({ activePlanningMode: "inventory" });
+
+    useAppStore.getState().toggleMealItemLock("breakfast", "starter-egg");
+
+    const state = useAppStore.getState();
+    expect(state.dailyPlans.inventory?.breakfast.items[0].locked).toBe(true);
+    expect(state.dailyPlans.free).toBe(freePlan);
+    expect(state.dailyPlans.free?.breakfast.items[0].locked).toBe(false);
+  });
+});
+
+describe("V3 persisted app data", () => {
+  it("restores both plans and the selected mode after a JSON round trip", () => {
     const saved: PersistedAppData = {
       profile: defaultProfile,
       foods: initialUserFoods,
-      dailyPlan,
-      inventoryOnly: true,
+      dailyPlans: { free: freePlan, inventory: inventoryPlan },
+      activePlanningMode: "inventory",
       recentFoodIds: ["starter-egg"],
       recentRecipeTemplateIds: ["egg-snack"],
     };
-    const restored = normalizePersistedAppData(JSON.parse(JSON.stringify(saved)) as PersistedAppData);
-    expect(restored.dailyPlan).toEqual(dailyPlan);
-    expect(restored.inventoryOnly).toBe(true);
+
+    const restored = normalizePersistedAppData(JSON.parse(JSON.stringify(saved)));
+
+    expect(restored.dailyPlans.free).toEqual(freePlan);
+    expect(restored.dailyPlans.inventory).toEqual(inventoryPlan);
+    expect(restored.activePlanningMode).toBe("inventory");
   });
 
-  it("adds Phase 2 defaults without overwriting existing V2 foods or profile", () => {
+  it("adds Phase 2.2 defaults without overwriting existing foods or profile", () => {
     const restored = normalizePersistedAppData({ profile: defaultProfile, foods: initialUserFoods });
     expect(restored.foods).toBe(initialUserFoods);
     expect(restored.profile).toBe(defaultProfile);
-    expect(restored.dailyPlan).toBeNull();
+    expect(restored.dailyPlans).toEqual({ free: null, inventory: null });
+    expect(restored.activePlanningMode).toBe("free");
     expect(restored.recentFoodIds).toEqual([]);
+  });
+});
+
+describe("V2 persistence migration", () => {
+  it.each([
+    [false, "free"],
+    [true, "inventory"],
+  ] as const)("moves the legacy plan selected by inventoryOnly=%s into the %s slot", (
+    inventoryOnly,
+    expectedMode,
+  ) => {
+    const restored = migratePersistedAppData({
+      profile: defaultProfile,
+      foods: initialUserFoods,
+      dailyPlan: freePlan,
+      inventoryOnly,
+      recentFoodIds: [],
+      recentRecipeTemplateIds: [],
+    }, 2);
+    const otherMode: PlanningMode = expectedMode === "free" ? "inventory" : "free";
+
+    expect(APP_STORAGE_VERSION).toBe(3);
+    expect(restored.activePlanningMode).toBe(expectedMode);
+    expect(restored.dailyPlans[expectedMode]).toBe(freePlan);
+    expect(restored.dailyPlans[otherMode]).toBeNull();
   });
 });
