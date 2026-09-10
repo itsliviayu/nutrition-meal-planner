@@ -1,20 +1,15 @@
 import type { AppRoute } from "../components/AppShell";
 
 interface PlaceholderPageProps {
-  kind: Extract<AppRoute, "today" | "recipes" | "shop">;
+  kind: Extract<AppRoute, "recipes" | "shop">;
   onOpenFoods: () => void;
 }
 
 const content = {
-  today: {
-    symbol: "☀",
-    title: "Your day will take shape here",
-    body: "Daily meal planning and nutrition summaries arrive in Phase 2. For now, build a food library the planner can trust.",
-  },
   recipes: {
     symbol: "⌁",
     title: "Recipes are coming next",
-    body: "Recipe templates and meal combinations are intentionally deferred until the food data foundation is ready.",
+    body: "Your generated meals already use recipe templates. Full recipe details and cooking instructions arrive in Phase 3.",
   },
   shop: {
     symbol: "○",

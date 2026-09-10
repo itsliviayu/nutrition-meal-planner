@@ -52,7 +52,7 @@ export function SettingsPage({ onDone }: SettingsPageProps) {
       </section>
 
       <section className="form-card">
-        <div className="form-section-heading"><span>03</span><div><h2>Kitchen & time</h2><p>These constraints will inform meal generation in Phase 2.</p></div></div>
+        <div className="form-section-heading"><span>03</span><div><h2>Kitchen & time</h2><p>These constraints shape your generated meals.</p></div></div>
         <fieldset className="choice-group"><legend>Available equipment</legend><div className="check-grid">{EQUIPMENT.map((option) => <label className="check-tile" key={option.value}><input type="checkbox" checked={draft.equipment.includes(option.value)} onChange={() => setDraft({ ...draft, equipment: toggleEquipment(draft.equipment, option.value) })} /><span>{option.label}</span></label>)}</div></fieldset>
         <label className="field"><span>Default maximum cooking time</span><div className="input-with-unit"><input type="number" min="1" value={draft.defaultMaxCookingTime} onChange={(event) => setDraft({ ...draft, defaultMaxCookingTime: Number(event.target.value) })} /><span>minutes</span></div></label>
       </section>

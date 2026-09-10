@@ -6,6 +6,7 @@ import { FoodFormPage } from "./pages/FoodFormPage";
 import { FoodsPage } from "./pages/FoodsPage";
 import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { TodayPage } from "./pages/TodayPage";
 
 const titles: Record<AppRoute, string> = {
   today: "Today",
@@ -29,11 +30,15 @@ const eyebrows: Partial<Record<AppRoute, string>> = {
 };
 
 export default function App() {
-  const [route, setRoute] = useState<AppRoute>("foods");
+  const [route, setRoute] = useState<AppRoute>("today");
+  const [settingsReturnRoute, setSettingsReturnRoute] = useState<AppRoute>("today");
   const [editingFoodId, setEditingFoodId] = useState<string>();
   const [selectedReferenceFoodId, setSelectedReferenceFoodId] = useState<string>();
 
   const navigate = (nextRoute: AppRoute) => {
+    if (nextRoute === "settings" && ["today", "foods", "recipes", "shop"].includes(route)) {
+      setSettingsReturnRoute(route);
+    }
     if (nextRoute !== "edit-food") setEditingFoodId(undefined);
     if (nextRoute !== "confirm-food") setSelectedReferenceFoodId(undefined);
     setRoute(nextRoute);
@@ -41,7 +46,9 @@ export default function App() {
   };
 
   let content;
-  if (route === "foods") {
+  if (route === "today") {
+    content = <TodayPage onOpenFoods={() => navigate("foods")} />;
+  } else if (route === "foods") {
     content = <FoodsPage onAdd={() => navigate("add-food")} onEdit={(id) => { setEditingFoodId(id); setRoute("edit-food"); window.scrollTo({ top: 0, behavior: "smooth" }); }} />;
   } else if (route === "add-food") {
     content = (
@@ -56,7 +63,7 @@ export default function App() {
   } else if (route === "custom-food" || route === "edit-food") {
     content = <FoodFormPage foodId={route === "edit-food" ? editingFoodId : undefined} onDone={() => navigate("foods")} onCancel={route === "custom-food" ? () => navigate("add-food") : undefined} />;
   } else if (route === "settings") {
-    content = <SettingsPage onDone={() => navigate("foods")} />;
+    content = <SettingsPage onDone={() => navigate(settingsReturnRoute)} />;
   } else {
     content = <PlaceholderPage kind={route} onOpenFoods={() => navigate("foods")} />;
   }
@@ -64,7 +71,7 @@ export default function App() {
   const detailPage = route === "add-food" || route === "confirm-food" || route === "custom-food" || route === "edit-food" || route === "settings";
   const goBack = route === "confirm-food" || route === "custom-food"
     ? () => navigate("add-food")
-    : () => navigate("foods");
+    : route === "settings" ? () => navigate(settingsReturnRoute) : () => navigate("foods");
 
   return (
     <AppShell
