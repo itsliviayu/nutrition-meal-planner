@@ -38,6 +38,7 @@ export interface RecipeInstructionStep {
 
 export interface RecipeIngredientSnapshot {
   foodId: string;
+  referenceFoodId?: string;
   foodName: string;
   amount: number;
   unit: ServingUnit;

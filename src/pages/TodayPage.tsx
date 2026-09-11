@@ -1,6 +1,7 @@
 import { useRef, type PointerEvent as ReactPointerEvent } from "react";
 import { MealCard } from "../components/MealCard";
 import { NutritionSummary } from "../components/NutritionSummary";
+import { getMealMissingIngredients } from "../engine/shoppingEngine";
 import { selectActiveDailyPlan, useAppStore } from "../stores/useAppStore";
 import type { MealType } from "../types";
 import type { PlanningMode } from "../utils/planningMode";
@@ -108,6 +109,7 @@ export function TodayPage({ onOpenFoods, onOpenRecipe }: TodayPageProps) {
         key={mealType}
         meal={dailyPlan[mealType]}
         foods={foods}
+        missingIngredientCount={getMealMissingIngredients(dailyPlan[mealType], foods).length}
         onOpenRecipe={() => onOpenRecipe(mealType)}
         onRegenerate={() => regenerateMeal(mealType)}
         onToggleLock={(foodId) => toggleMealItemLock(mealType, foodId)}

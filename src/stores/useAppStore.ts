@@ -1,15 +1,29 @@
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { defaultProfile } from "../data/defaultProfile";
+import { createUserFoodFromReference, findReferenceDuplicate } from "../data/foodFactory";
 import { migratePersistedFood } from "../data/foodMigration";
 import { initialUserFoods } from "../data/initialFoods";
+import { referenceFoods } from "../data/seedFoods";
 import { generateDailyPlan as buildDailyPlan } from "../engine/dailyGenerator";
 import { generateMeal } from "../engine/mealGenerator";
 import { recalculateDailyPlan, updateMealItemPortion as updatePlanPortion } from "../engine/planNutrition";
 import { targetForMealRegeneration } from "../engine/dailyGenerator";
 import { createSavedRecipeSnapshot, deriveGeneratedRecipe, recipeSnapshotKey } from "../engine/generatedRecipe";
 import { getIngredientSwapCandidates } from "../engine/recipeSwap";
-import type { DailyPlan, Food, GeneratedRecipe, MealType, SavedRecipe, UserProfile } from "../types";
+import { createShoppingItemsFromNeeds, mergeShoppingItems } from "../engine/shoppingEngine";
+import type {
+  DailyPlan,
+  Food,
+  GeneratedRecipe,
+  MealType,
+  SavedRecipe,
+  ShoppingItem,
+  ShoppingItemSource,
+  ShoppingNeed,
+  UserProfile,
+} from "../types";
+import { createId } from "../utils/id";
 import {
   inventoryOnlyFromPlanningMode,
   planningModeFromInventoryOnly,
@@ -27,6 +41,7 @@ export interface AppState {
   dailyPlans: ModeDailyPlans;
   activePlanningMode: PlanningMode;
   savedRecipes: SavedRecipe[];
+  shoppingItems: ShoppingItem[];
   recentFoodIds: string[];
   recentRecipeTemplateIds: string[];
   generationMessage: string | null;
@@ -46,6 +61,11 @@ export interface AppState {
   swapMealItem: (mealType: MealType, foodId: string, replacementFoodId: string) => boolean;
   saveRecipe: (recipe: GeneratedRecipe) => SavedRecipe;
   deleteSavedRecipe: (id: string) => void;
+  addShoppingNeeds: (needs: ShoppingNeed[], source: ShoppingItemSource) => void;
+  addFoodToShopping: (foodId: string) => void;
+  removeShoppingItem: (id: string) => void;
+  markShoppingItemBought: (id: string) => boolean;
+  addReferenceFoodToMyFoods: (referenceFoodId: string, inStock?: boolean) => Food | undefined;
   clearGenerationMessage: () => void;
 }
 
@@ -55,6 +75,7 @@ export interface PersistedAppData {
   dailyPlans: ModeDailyPlans;
   activePlanningMode: PlanningMode;
   savedRecipes: SavedRecipe[];
+  shoppingItems: ShoppingItem[];
   recentFoodIds: string[];
   recentRecipeTemplateIds: string[];
 }
@@ -66,7 +87,7 @@ export interface LegacyPersistedAppData {
 
 type PersistedAppInput = Partial<PersistedAppData> & Partial<LegacyPersistedAppData>;
 
-export const APP_STORAGE_VERSION = 4;
+export const APP_STORAGE_VERSION = 5;
 
 const emptyDailyPlans = (): ModeDailyPlans => ({ free: null, inventory: null });
 
@@ -96,6 +117,7 @@ export const normalizePersistedAppData = (
     dailyPlans,
     activePlanningMode,
     savedRecipes: persisted?.savedRecipes ?? [],
+    shoppingItems: persisted?.shoppingItems ?? [],
     recentFoodIds: persisted?.recentFoodIds ?? [],
     recentRecipeTemplateIds: persisted?.recentRecipeTemplateIds ?? [],
   };
@@ -161,6 +183,7 @@ export const useAppStore = create<AppState>()(
       dailyPlans: emptyDailyPlans(),
       activePlanningMode: "free",
       savedRecipes: [],
+      shoppingItems: [],
       recentFoodIds: [],
       recentRecipeTemplateIds: [],
       generationMessage: null,
@@ -351,6 +374,86 @@ export const useAppStore = create<AppState>()(
       deleteSavedRecipe: (id) => set((state) => ({
         savedRecipes: state.savedRecipes.filter((recipe) => recipe.id !== id),
       })),
+      addShoppingNeeds: (needs, source) => set((state) => ({
+        shoppingItems: mergeShoppingItems(
+          state.shoppingItems,
+          createShoppingItemsFromNeeds(needs, source),
+        ),
+      })),
+      addFoodToShopping: (foodId) => set((state) => {
+        const food = state.foods.find((candidate) => candidate.id === foodId);
+        if (!food) return state;
+        const needs: ShoppingNeed[] = [{
+          foodId: food.id,
+          referenceFoodId: food.referenceFoodId,
+          displayName: food.name,
+          status: "missing",
+        }];
+        return {
+          shoppingItems: mergeShoppingItems(
+            state.shoppingItems,
+            createShoppingItemsFromNeeds(needs, "manual"),
+          ),
+        };
+      }),
+      removeShoppingItem: (id) => set((state) => ({
+        shoppingItems: state.shoppingItems.filter((item) => item.id !== id),
+      })),
+      markShoppingItemBought: (id) => {
+        const state = get();
+        const item = state.shoppingItems.find((candidate) => candidate.id === id);
+        if (!item) return false;
+        const existingFood = state.foods.find((food) => food.id === item.foodId)
+          ?? (item.referenceFoodId
+            ? state.foods.find((food) => food.referenceFoodId === item.referenceFoodId)
+            : undefined);
+        if (existingFood) {
+          set({
+            foods: state.foods.map((food) => food.id === existingFood.id
+              ? { ...food, inStock: true }
+              : food),
+            shoppingItems: state.shoppingItems.filter((candidate) => candidate.id !== id),
+          });
+          return true;
+        }
+        const referenceFood = item.referenceFoodId
+          ? referenceFoods.find((food) => food.id === item.referenceFoodId)
+          : undefined;
+        if (!referenceFood) return false;
+        const userFood = createUserFoodFromReference(referenceFood, {
+          id: createId(),
+          inStock: true,
+          regularBuy: false,
+          favourite: false,
+        });
+        set({
+          foods: [...state.foods, userFood],
+          shoppingItems: state.shoppingItems.filter((candidate) => candidate.id !== id),
+        });
+        return true;
+      },
+      addReferenceFoodToMyFoods: (referenceFoodId, inStock = false) => {
+        const state = get();
+        const referenceFood = referenceFoods.find((food) => food.id === referenceFoodId);
+        if (!referenceFood) return undefined;
+        const existingFood = findReferenceDuplicate(state.foods, referenceFood);
+        if (existingFood) {
+          if (inStock && !existingFood.inStock) {
+            const updated = { ...existingFood, inStock: true };
+            set({ foods: state.foods.map((food) => food.id === existingFood.id ? updated : food) });
+            return updated;
+          }
+          return existingFood;
+        }
+        const userFood = createUserFoodFromReference(referenceFood, {
+          id: createId(),
+          inStock,
+          regularBuy: false,
+          favourite: false,
+        });
+        set({ foods: [...state.foods, userFood] });
+        return userFood;
+      },
       clearGenerationMessage: () => set({ generationMessage: null }),
     }),
     {
@@ -363,6 +466,7 @@ export const useAppStore = create<AppState>()(
         dailyPlans,
         activePlanningMode,
         savedRecipes,
+        shoppingItems,
         recentFoodIds,
         recentRecipeTemplateIds,
       }) => ({
@@ -371,6 +475,7 @@ export const useAppStore = create<AppState>()(
         dailyPlans,
         activePlanningMode,
         savedRecipes,
+        shoppingItems,
         recentFoodIds,
         recentRecipeTemplateIds,
       }),

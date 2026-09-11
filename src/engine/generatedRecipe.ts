@@ -152,6 +152,7 @@ export const deriveGeneratedRecipe = (
     if (!food) return [];
     return [{
       foodId: food.id,
+      referenceFoodId: food.referenceFoodId,
       foodName: food.name,
       amount: item.amount,
       unit: item.unit,
@@ -201,8 +202,9 @@ export const createSavedRecipeSnapshot = (
   name: recipe.name,
   sourceTemplateId: recipe.sourceTemplateId,
   mealType: recipe.mealType,
-  ingredients: recipe.ingredients.map(({ foodId, foodName, amount, unit }) => ({
+  ingredients: recipe.ingredients.map(({ foodId, referenceFoodId, foodName, amount, unit }) => ({
     foodId,
+    referenceFoodId,
     foodName,
     amount,
     unit,

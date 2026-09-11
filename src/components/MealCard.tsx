@@ -6,6 +6,7 @@ interface MealCardProps {
   foods: Food[];
   onRegenerate: () => void;
   onOpenRecipe: () => void;
+  missingIngredientCount: number;
   onToggleLock: (foodId: string) => void;
   onUpdatePortion: (foodId: string, amount: number) => void;
 }
@@ -51,7 +52,7 @@ function PortionInput({
   );
 }
 
-export function MealCard({ meal, foods, onRegenerate, onOpenRecipe, onToggleLock, onUpdatePortion }: MealCardProps) {
+export function MealCard({ meal, foods, onRegenerate, onOpenRecipe, missingIngredientCount, onToggleLock, onUpdatePortion }: MealCardProps) {
   const [editingPortions, setEditingPortions] = useState(false);
   const equipment = meal.equipment.length ? meal.equipment.join(" · ") : "No special equipment";
 
@@ -62,6 +63,11 @@ export function MealCard({ meal, foods, onRegenerate, onOpenRecipe, onToggleLock
           <p className="section-kicker">{mealLabel[meal.type]}</p>
           <h2>{meal.name}</h2>
           <span>{Math.round(meal.nutrition.calories)} kcal · {Math.round(meal.nutrition.protein)}g protein</span>
+          {missingIngredientCount > 0 && (
+            <button className="meal-card__missing" type="button" onClick={onOpenRecipe}>
+              {missingIngredientCount} {missingIngredientCount === 1 ? "item" : "items"} to buy
+            </button>
+          )}
         </div>
         <div className="meal-card__time"><strong>{meal.cookingTime}</strong><span>min</span></div>
       </header>

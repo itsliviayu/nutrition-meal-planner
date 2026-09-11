@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { defaultProfile } from "../data/defaultProfile";
 import { initialUserFoods } from "../data/initialFoods";
-import type { DailyPlan, MealPlan, MealType, SavedRecipe } from "../types";
+import type { DailyPlan, MealPlan, MealType, SavedRecipe, ShoppingItem } from "../types";
 import type { PlanningMode } from "../utils/planningMode";
 import {
   APP_STORAGE_VERSION,
@@ -54,6 +54,14 @@ const savedRecipe: SavedRecipe = {
   fibreDataComplete: false,
   createdAt: "2026-09-10T12:00:00.000Z",
 };
+const shoppingItem: ShoppingItem = {
+  id: "shopping-egg",
+  foodId: "starter-egg",
+  referenceFoodId: "egg",
+  displayName: "Egg",
+  sources: ["recipe"],
+  createdAt: "2026-09-10T12:00:00.000Z",
+};
 
 const resetStore = (dailyPlans: ModeDailyPlans = { free: null, inventory: null }) => {
   useAppStore.setState({
@@ -62,6 +70,7 @@ const resetStore = (dailyPlans: ModeDailyPlans = { free: null, inventory: null }
     dailyPlans,
     activePlanningMode: "free",
     savedRecipes: [],
+    shoppingItems: [],
     recentFoodIds: [],
     recentRecipeTemplateIds: [],
     generationMessage: null,
@@ -170,7 +179,7 @@ describe("mode-specific DailyPlan state", () => {
   });
 });
 
-describe("V4 persisted app data", () => {
+describe("V5 persisted app data", () => {
   it("restores both plans, the selected mode and Saved Recipes after a JSON round trip", () => {
     const saved: PersistedAppData = {
       profile: defaultProfile,
@@ -178,6 +187,7 @@ describe("V4 persisted app data", () => {
       dailyPlans: { free: freePlan, inventory: inventoryPlan },
       activePlanningMode: "inventory",
       savedRecipes: [savedRecipe],
+      shoppingItems: [shoppingItem],
       recentFoodIds: ["starter-egg"],
       recentRecipeTemplateIds: ["egg-snack"],
     };
@@ -188,6 +198,7 @@ describe("V4 persisted app data", () => {
     expect(restored.dailyPlans.inventory).toEqual(inventoryPlan);
     expect(restored.activePlanningMode).toBe("inventory");
     expect(restored.savedRecipes).toEqual([savedRecipe]);
+    expect(restored.shoppingItems).toEqual([shoppingItem]);
   });
 
   it("adds Phase 2.2 defaults without overwriting existing foods or profile", () => {
@@ -197,6 +208,7 @@ describe("V4 persisted app data", () => {
     expect(restored.dailyPlans).toEqual({ free: null, inventory: null });
     expect(restored.activePlanningMode).toBe("free");
     expect(restored.savedRecipes).toEqual([]);
+    expect(restored.shoppingItems).toEqual([]);
     expect(restored.recentFoodIds).toEqual([]);
   });
 });
@@ -219,7 +231,7 @@ describe("V2 persistence migration", () => {
     }, 2);
     const otherMode: PlanningMode = expectedMode === "free" ? "inventory" : "free";
 
-    expect(APP_STORAGE_VERSION).toBe(4);
+    expect(APP_STORAGE_VERSION).toBe(5);
     expect(restored.activePlanningMode).toBe(expectedMode);
     expect(restored.dailyPlans[expectedMode]).toBe(freePlan);
     expect(restored.dailyPlans[otherMode]).toBeNull();
@@ -240,6 +252,27 @@ describe("V3 persistence migration", () => {
     expect(restored.dailyPlans).toEqual({ free: freePlan, inventory: inventoryPlan });
     expect(restored.activePlanningMode).toBe("inventory");
     expect(restored.savedRecipes).toEqual([]);
+    expect(restored.foods).toBe(initialUserFoods);
+    expect(restored.profile).toBe(defaultProfile);
+  });
+});
+
+describe("V4 persistence migration", () => {
+  it("preserves Recipe Experience state while adding an empty Shopping List", () => {
+    const restored = migratePersistedAppData({
+      profile: defaultProfile,
+      foods: initialUserFoods,
+      dailyPlans: { free: freePlan, inventory: inventoryPlan },
+      activePlanningMode: "inventory",
+      savedRecipes: [savedRecipe],
+      recentFoodIds: ["starter-egg"],
+      recentRecipeTemplateIds: ["egg-snack"],
+    }, 4);
+
+    expect(restored.dailyPlans).toEqual({ free: freePlan, inventory: inventoryPlan });
+    expect(restored.activePlanningMode).toBe("inventory");
+    expect(restored.savedRecipes).toEqual([savedRecipe]);
+    expect(restored.shoppingItems).toEqual([]);
     expect(restored.foods).toBe(initialUserFoods);
     expect(restored.profile).toBe(defaultProfile);
   });

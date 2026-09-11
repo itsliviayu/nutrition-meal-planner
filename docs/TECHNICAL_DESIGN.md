@@ -1389,6 +1389,35 @@ Generator
 
 ## Smart Shopping
 
+Phase 3B的Shop页面由以下五项能力组成：
+
+* Shopping List
+* Missing Ingredients
+* Buy Again
+* Try Something New
+* Mark as Bought
+
+Shopping List是唯一新增并持久化的Shopping状态。其记录来源支持：
+
+```ts
+type ShoppingItemSource =
+  | "current_plan"
+  | "recipe"
+  | "saved_recipe"
+  | "manual";
+
+interface ShoppingItem {
+  id: string;
+  foodId?: string;
+  referenceFoodId?: string;
+  displayName: string;
+  sources: ShoppingItemSource[];
+  createdAt: string;
+}
+```
+
+去重时优先使用`referenceFoodId`，否则使用`foodId`。同一食品可以合并多个source，但只显示一条Shopping Item。Phase 3B不在Shopping Item中引入购买数量或库存数量。
+
 ---
 
 # 36. Recipe Shopping
@@ -1422,6 +1451,38 @@ To Buy
 □ Spinach
 □ Cream Sauce
 ```
+
+Missing Ingredients不单独保存，而是在render / selector阶段根据最新User Food的`inStock`即时派生：
+
+```text
+Generated Recipe ingredient
+→ 使用foodId匹配User Food
+
+Saved Recipe ingredient snapshot
+→ 优先使用foodId匹配User Food
+→ 找不到时使用referenceFoodId匹配
+→ 仍无法匹配时返回Stock status unavailable
+```
+
+这里不允许仅凭名称猜测库存状态。Saved Recipe snapshot可保留可选`referenceFoodId`，用于原User Food被重新创建后的安全匹配。
+
+Current Plan、Generated Recipe和Saved Recipe都可以把明确缺少的ingredient加入Shopping List；用户也可以从My Foods手动添加。
+
+`Mark as Bought`的状态变更规则：
+
+```text
+已有关联User Food
+→ 更新该User Food的inStock = true
+→ 移除对应shopping record
+
+Reference-only item
+→ 从Reference Food创建独立User Food copy
+→ 保留referenceFoodId
+→ 设置inStock = true
+→ 移除对应shopping record
+```
+
+Reference Food始终只读。单独移除Shopping Item只删除shopping record，不删除User Food。
 
 ---
 
@@ -1463,6 +1524,28 @@ Spinach：
 
 于是Chicken和Spinach优先。
 
+Phase 3B把Smart Shopping拆成两个互不混淆的候选池：
+
+## Buy Again
+
+候选必须满足：
+
+```text
+food ∈ My Foods AND food.inStock = false
+```
+
+排序因素为current plan need、recipe coverage、regularBuy、favourite与meal versatility。它只推荐用户已经加入My Foods、当前不在库存中的食品。
+
+## Try Something New
+
+候选必须满足：
+
+```text
+food ∈ Reference Foods AND food ∉ My Foods
+```
+
+它只提供发现建议，不直接把Reference Food放入Meal Generator。用户明确选择`Add to My Foods`后才创建独立User Food copy并进入planning pool；默认`inStock = false`。如果用户选择加入并标记已购买，则新copy设置为`inStock = true`。任何操作都不修改Reference Food。
+
 ---
 
 # 38. Shopping Score
@@ -1472,23 +1555,23 @@ Spinach：
 ```text
 Shopping Score =
 
-Recipe Coverage × 0.4
+Current Plan Need × 0.35
 
 +
 
-Meal Versatility × 0.25
+Recipe Coverage × 0.30
 
 +
 
-Nutrition Utility × 0.2
+Regular Buy × 0.15
 
 +
 
-Regular Buy × 0.1
+Favourite × 0.10
 
 +
 
-Favourite × 0.05
+Meal Versatility × 0.10
 ```
 
 ---
@@ -1775,25 +1858,41 @@ Breakfast
 ```text
 Shop
 
-Recommended to Buy
+Shopping List
+
+□ Spinach
+  Current plan · Saved recipe
+
+□ Greek Yogurt
+  Added manually
+
+[ Mark as Bought ]
+
+----------------
+
+Buy Again
 
 Chicken Breast
-Used across 12 meal combinations
+Needed by current plan · Used across recipes
 
 Spinach
-Used across 9 meal combinations
+Regular buy · Breakfast + Lunch
 
 Eggs
 Breakfast · Lunch · Snack
 
 ----------------
 
-Needed for Saved Recipes
+Try Something New
 
-□ Mushroom
-□ Greek Yogurt
-□ Pasta Sauce
+Reference foods not yet in My Foods
+
+[ Add to My Foods ]
 ```
+
+Missing Ingredients在current plan、generated recipe和saved recipe上下文中即时显示，可加入Shopping List。无法安全映射到当前User Food的Saved Recipe ingredient显示`Stock status unavailable`。
+
+Shop页面只呈现一个My Foods库及其`inStock`状态，不引入第三个库存库。
 
 ---
 
@@ -1829,6 +1928,8 @@ foods
 recipes
 dailyPlans
 activePlanningMode
+savedRecipes
+shoppingItems
 ```
 
 Phase 2.2的Today相关state与action路由：
@@ -1852,7 +1953,7 @@ generateDailyPlan / regenerateMeal / toggleMealItemLock / updateMealItemPortion
 当前persist版本为：
 
 ```text
-V3
+V5
 ```
 
 V2最初引入的Food迁移规则继续保留：
@@ -1889,6 +1990,28 @@ inventoryOnly = true
 ```
 
 迁移必须保留旧`dailyPlan`以及既有Profile、User Foods和recent history。迁移后刷新应同时恢复`dailyPlans.free`、`dailyPlans.inventory`与`activePlanningMode`。
+
+Phase 3A新增`savedRecipes` snapshot persistence，persist版本从V3升级为V4。
+
+Phase 3B新增`shoppingItems`，persist版本从V4升级为V5。Missing Ingredients、Buy Again和Try Something New都是从现有结构化数据即时派生的view model，不保存重复状态。
+
+V4 → V5 migration：
+
+```text
+shoppingItems = 旧shoppingItems ?? []
+```
+
+迁移必须完整保留：
+
+* Profile
+* My Foods / User Foods
+* `dailyPlans.free`
+* `dailyPlans.inventory`
+* `activePlanningMode`
+* `savedRecipes`
+* recent food / recipe-template history
+
+V5持久化的应用数据包括Profile、User Foods、两个mode-specific DailyPlan、active mode、Saved Recipes、Shopping Items与recent history。Reference Foods仍是只读静态数据，不写入localStorage。
 
 ---
 
@@ -2052,32 +2175,47 @@ Phase 2.2不修改Meal Generator、candidate scoring、recipe templates、nutrit
 
 ---
 
-## Phase 3 — Recipe + Shopping
+## Phase 3A — Recipe Experience
 
-完成：
+已完成：
 
 * Recipe详情
 * 动态Ingredient substitution
 * Equipment filtering
 * Cooking time
-* Inventory
-* Missing ingredients
-* Smart Shopping
+* Saved Recipe snapshots
+
+---
+
+## Phase 3B — Shopping
+
+已完成：
+
+* Shopping List
+* 根据最新User Food `inStock`即时派生Missing Ingredients
+* Buy Again
+* Try Something New
+* Mark as Bought
+* Reference-only item购买后创建独立User Food copy
+* localStorage V5与V4 → V5 migration
+
+库存继续只使用boolean `inStock`。Phase 3B不实现库存数量、自动扣减或expiry tracking。
 
 ---
 
 ## Phase 4 — Natural Language
 
-完成：
+尚未实现：
 
 * Text input
 * Rule parser
 * Constraint Chips
 * Conditional generation
+* AI / LLM
+* OCR / barcode
+* Backend / authentication / cloud
 
-之后再决定是否：
-
-接LLM API。
+Phase 4的产品范围保持不变，本次文档同步不提前实现或扩展该阶段。
 
 ---
 

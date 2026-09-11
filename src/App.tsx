@@ -4,10 +4,10 @@ import { AddFoodPage } from "./pages/AddFoodPage";
 import { ConfirmCommonFoodPage } from "./pages/ConfirmCommonFoodPage";
 import { FoodFormPage } from "./pages/FoodFormPage";
 import { FoodsPage } from "./pages/FoodsPage";
-import { PlaceholderPage } from "./pages/PlaceholderPage";
 import { RecipeDetailPage, SavedRecipeDetailPage } from "./pages/RecipeDetailPage";
 import { RecipesPage } from "./pages/RecipesPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { ShopPage } from "./pages/ShopPage";
 import { TodayPage } from "./pages/TodayPage";
 import type { MealType } from "./types";
 
@@ -78,10 +78,12 @@ export default function App() {
     content = <RecipeDetailPage mealType={selectedMealType} onBack={() => navigate("today")} />;
   } else if (route === "recipes") {
     content = <RecipesPage onOpenRecipe={(id) => { setSelectedSavedRecipeId(id); navigate("saved-recipe-detail"); }} />;
+  } else if (route === "shop") {
+    content = <ShopPage />;
   } else if (route === "saved-recipe-detail") {
     content = <SavedRecipeDetailPage recipeId={selectedSavedRecipeId} onDeleted={() => navigate("recipes")} />;
   } else {
-    content = <PlaceholderPage kind={route} onOpenFoods={() => navigate("foods")} />;
+    content = null;
   }
 
   const detailPage = route === "add-food" || route === "confirm-food" || route === "custom-food" || route === "edit-food" || route === "settings" || route === "recipe-detail" || route === "saved-recipe-detail";

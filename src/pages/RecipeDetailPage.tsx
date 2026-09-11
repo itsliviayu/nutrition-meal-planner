@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { deriveGeneratedRecipe, recipeSnapshotKey } from "../engine/generatedRecipe";
 import { getIngredientSwapCandidates } from "../engine/recipeSwap";
+import { getGeneratedRecipeNeeds, getSavedRecipeNeeds, shoppingIdentityKey } from "../engine/shoppingEngine";
 import { selectActiveDailyPlan, useAppStore } from "../stores/useAppStore";
 import type {
   GeneratedRecipe,
@@ -8,6 +9,8 @@ import type {
   MealType,
   RecipeIngredientSnapshot,
   ServingUnit,
+  ShoppingItemSource,
+  ShoppingNeed,
 } from "../types";
 
 const mealLabels: Record<MealType, string> = {
@@ -57,6 +60,55 @@ function RecipeMethod({ instructions }: { instructions: string[] }) {
   );
 }
 
+function RecipeNeeds({ needs, source }: { needs: ShoppingNeed[]; source: ShoppingItemSource }) {
+  const shoppingItems = useAppStore((state) => state.shoppingItems);
+  const addShoppingNeeds = useAppStore((state) => state.addShoppingNeeds);
+  const [isOpen, setIsOpen] = useState(false);
+  const allAdded = needs.length > 0 && needs.every((need) =>
+    shoppingItems.some((item) => shoppingIdentityKey(item) === shoppingIdentityKey(need)));
+
+  return (
+    <section className={`recipe-needs${isOpen ? " is-open" : ""}`}>
+      <button
+        className="recipe-needs__trigger"
+        type="button"
+        aria-expanded={isOpen}
+        onClick={() => setIsOpen((value) => !value)}
+      >
+        <span><strong>What do I need?</strong><small>Check this recipe against what’s in stock.</small></span>
+        <span aria-hidden="true">{isOpen ? "−" : "+"}</span>
+      </button>
+      {isOpen && (
+        <div className="recipe-needs__body">
+          {needs.length === 0 ? (
+            <p className="recipe-needs__complete">You have everything you need.</p>
+          ) : (
+            <>
+              <p className="section-kicker">You need</p>
+              <ul>
+                {needs.map((need) => (
+                  <li key={shoppingIdentityKey(need)}>
+                    <span><strong>{need.displayName}</strong>{need.status === "stock_status_unavailable" && <small>Stock status unavailable</small>}</span>
+                    {need.amount !== undefined && need.unit && <span>{need.amount}{unitLabel(need.unit)}</span>}
+                  </li>
+                ))}
+              </ul>
+              <button
+                className={allAdded ? "secondary-button" : "primary-button"}
+                type="button"
+                disabled={allAdded}
+                onClick={() => addShoppingNeeds(needs, source)}
+              >
+                {allAdded ? "Added to Shopping List" : "Add Missing to Shopping List"}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function RecipeDetailPage({ mealType, onBack }: { mealType?: MealType; onBack: () => void }) {
   const foods = useAppStore((state) => state.foods);
   const dailyPlan = useAppStore(selectActiveDailyPlan);
@@ -67,6 +119,7 @@ export function RecipeDetailPage({ mealType, onBack }: { mealType?: MealType; on
   const [swapFoodId, setSwapFoodId] = useState<string>();
   const meal = mealType && dailyPlan ? dailyPlan[mealType] : undefined;
   const recipe = useMemo(() => meal ? deriveGeneratedRecipe(meal, foods) : undefined, [meal, foods]);
+  const shoppingNeeds = useMemo(() => recipe ? getGeneratedRecipeNeeds(recipe, foods) : [], [recipe, foods]);
   const isSaved = recipe
     ? savedRecipes.some((saved) => recipeSnapshotKey(saved) === recipeSnapshotKey(recipe))
     : false;
@@ -156,6 +209,8 @@ export function RecipeDetailPage({ mealType, onBack }: { mealType?: MealType; on
         </ul>
       </section>
 
+      <RecipeNeeds needs={shoppingNeeds} source="recipe" />
+
       <RecipeMethod instructions={recipe.instructions} />
 
       <footer className="recipe-save-bar" aria-live="polite">
@@ -170,8 +225,10 @@ export function RecipeDetailPage({ mealType, onBack }: { mealType?: MealType; on
 
 export function SavedRecipeDetailPage({ recipeId, onDeleted }: { recipeId?: string; onDeleted: () => void }) {
   const recipe = useAppStore((state) => state.savedRecipes.find((candidate) => candidate.id === recipeId));
+  const foods = useAppStore((state) => state.foods);
   const deleteSavedRecipe = useAppStore((state) => state.deleteSavedRecipe);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const shoppingNeeds = useMemo(() => recipe ? getSavedRecipeNeeds(recipe, foods) : [], [recipe, foods]);
 
   if (!recipe) {
     return (
@@ -212,6 +269,8 @@ export function SavedRecipeDetailPage({ recipeId, onDeleted }: { recipeId?: stri
           ))}
         </ul>
       </section>
+
+      <RecipeNeeds needs={shoppingNeeds} source="saved_recipe" />
 
       <RecipeMethod instructions={recipe.instructions} />
 

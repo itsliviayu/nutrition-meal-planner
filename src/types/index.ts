@@ -3,6 +3,14 @@ export type { DailyNutritionStatus, DailyPlan, MealItem, MealPlan, MealType, Tar
 export type { Nutrition, NutritionBasis, ServingUnit } from "./nutrition";
 export type { Equipment, Goal, TargetRange, UserProfile } from "./profile";
 export type {
+  BuyAgainSuggestion,
+  NewFoodSuggestion,
+  ShoppingItem,
+  ShoppingItemSource,
+  ShoppingNeed,
+  ShoppingNeedStatus,
+} from "./shopping";
+export type {
   GeneratorConstraints,
   GeneratorPreferences,
   GeneratedRecipe,

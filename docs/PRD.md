@@ -1560,6 +1560,18 @@ No-Cook
 
 > 我现在去Lidl，但根本不知道应该买什么才能支持接下来随机搭配。
 
+Phase 3B已完成以下Shopping能力：
+
+* Shopping List
+* Missing Ingredients
+* Buy Again
+* Try Something New
+* Mark as Bought
+
+Shopping继续沿用两层食品模型：Reference Food是系统只读参考数据，My Foods / User Food Library是用户认可并允许Meal Planner使用的食品。`In Stock`仍然只是User Food上的boolean状态，不创建第三套Food Library。
+
+当前库存模型只回答“有没有”，不回答“有多少”。Phase 3B不记录库存数量、已购买数量、package size，不自动扣减库存，也不追踪expiry date。
+
 ---
 
 # 30. Recipe Shopping List
@@ -1594,6 +1606,52 @@ Cream Sauce
 食品自动：
 
 `inStock = true`
+
+## Missing Ingredients
+
+Missing Ingredients不作为独立状态保存，而是根据当前My Foods中对应User Food的`inStock`即时派生：
+
+```text
+inStock = false → missing
+inStock = true  → available
+```
+
+Generated Recipe使用ingredient的`foodId`匹配当前User Food。
+
+Saved Recipe保存的是ingredient snapshot。判断当前库存时：
+
+1. 优先使用`foodId`匹配当前User Food
+2. 如果原User Food已被重新创建，则使用可选`referenceFoodId`匹配
+3. 无法安全匹配时不根据名称猜测，显示`Stock status unavailable`
+
+无法匹配的Saved Recipe ingredient仍可由用户手动加入Shopping List，但系统不声称知道其库存状态。
+
+## Shopping List
+
+Shopping List只保存用户明确准备购买的结构化食品记录。来源可以是：
+
+* current plan
+* generated recipe
+* saved recipe
+* manual（从My Foods手动加入）
+
+同一User Food或同一`referenceFoodId`只保留一条Shopping Item；如果来自多个位置，可以合并来源，但不重复展示。
+
+`Mark as Bought`采用简单完成方式：
+
+```text
+已有User Food
+→ inStock = true
+→ 移除对应shopping record
+
+Reference-only item
+→ 创建独立User Food copy
+→ 保留referenceFoodId
+→ inStock = true
+→ 移除对应shopping record
+```
+
+移除Shopping Item只删除shopping record，不删除My Foods中的User Food。
 
 ---
 
@@ -1646,6 +1704,42 @@ Personal Preference
 ```
 
 库存已有食品降低推荐权重。
+
+Phase 3B将推荐明确分为两个区域。
+
+## Buy Again
+
+候选严格来自：
+
+```text
+My Foods AND inStock = false
+```
+
+不包含尚未加入My Foods的Reference-only foods。排序使用确定性score：
+
+```text
+Current Plan Need   35%
+Recipe Coverage     30%
+Regular Buy         15%
+Favourite           10%
+Meal Versatility    10%
+```
+
+其中Current Plan Need表示该食品是否补齐当前`dailyPlans.free`中的missing ingredient；Recipe Coverage表示它能匹配多少现有Recipe Template / slot。UI只显示推荐原因，不显示算法分数。
+
+## Try Something New
+
+候选严格来自：
+
+```text
+Reference Food Library MINUS My Foods
+```
+
+推荐根据Recipe / slot compatibility、当前My Foods类别稀缺度、meal versatility、已有结构化category/tags提供的nutrition utility，以及与现有食品的相似度进行确定性排序。页面只展示少量结果，不替代完整Reference Food搜索。
+
+Try Something New只负责推荐，不扩大Meal Generator候选池。用户必须明确点击`Add to My Foods`，系统创建独立User Food copy后，该食品才进入planning pool。默认`inStock = false`；只有用户选择`Add & Mark In Stock`时才设置为true。
+
+任何上述操作都不得修改Reference Food基础数据。
 
 ---
 
@@ -1846,7 +1940,7 @@ V1：
 当前持久化schema版本：
 
 ```text
-V3
+V5
 ```
 
 V2增加`referenceFoodId`和`nutritionSource`，并支持将Phase 1已保存的Food数据自动迁移，不清空或覆盖用户已有食品。
@@ -1856,6 +1950,10 @@ Phase 1.2新增的`aliases`和reference source字段为可选元数据，因此p
 Phase 2.1继续复用已持久化的`foods`和`inventoryOnly`。Multi Add仍向同一个User Food数组添加记录；Planning Mode只是`inventoryOnly`的UI映射，因此不改变persist版本，也不需要migration。
 
 Phase 2.2将单个`dailyPlan`与`inventoryOnly`升级为`dailyPlans.free`、`dailyPlans.inventory`和`activePlanningMode`，因此persist版本从V2升级为V3。
+
+Phase 3A新增`savedRecipes` snapshot persistence，因此persist版本从V3升级为V4。
+
+Phase 3B新增`shoppingItems`，因此persist版本从V4升级为V5。Missing Ingredients、Buy Again与Try Something New均即时派生，不持久化为容易过期的重复状态。
 
 V2 → V3 migration：
 
@@ -1873,12 +1971,23 @@ inventoryOnly = true
 
 迁移必须保留旧DailyPlan，不清空或覆盖用户已有Food、Profile与其他持久化数据。
 
+V4 → V5 migration为旧状态补充空的`shoppingItems`，并完整保留：
+
+* Profile
+* My Foods / User Foods
+* `dailyPlans.free`
+* `dailyPlans.inventory`
+* `activePlanningMode`
+* `savedRecipes`
+* recent generator history
+
 保存：
 
 * Profile
 * Foods
 * Inventory
 * Recipes
+* Shopping Items
 * 两个mode-specific Today Plans
 * Active Planning Mode
 * Settings
@@ -1889,6 +1998,20 @@ inventoryOnly = true
 * Authentication
 * Database
 * Cloud Sync
+
+## 当前阶段状态
+
+Phase 3B Shopping已完成。本阶段只使用本地结构化数据与localStorage，不引入新的服务端能力。
+
+Phase 4尚未实现，包括：
+
+* Natural Language
+* Constraint Chips
+* AI / LLM
+* OCR / barcode
+* Backend / authentication / cloud
+
+这些能力仍保留在后续阶段范围内，本次文档同步不改变Phase 2–4的既定产品边界。
 
 ---
 
