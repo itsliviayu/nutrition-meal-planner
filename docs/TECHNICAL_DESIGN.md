@@ -1262,9 +1262,9 @@ Courgette
 
 ---
 
-# 32. 自然语言解析架构
+# 32. 自然语言解析架构（Deferred）
 
-第一版：
+Natural Language Planning不包含在当前V1中。以下架构仅作为未来实现方向保留：
 
 ```text
 Input
@@ -1304,9 +1304,9 @@ Generator
 
 ---
 
-# 33. Chips UI
+# 33. Chips UI（Future）
 
-输入以后立即显示：
+未来启用Natural Language Planning后，输入可以显示：
 
 ```text
 [Chicken ×]
@@ -1326,9 +1326,9 @@ Generator
 
 ---
 
-# 34. Natural Language第一版支持范围
+# 34. Natural Language未来支持范围
 
-只支持：
+未来第一版建议只支持：
 
 ## Include
 
@@ -1375,7 +1375,17 @@ Generator
 高蛋白一点
 ```
 
-不要第一版试图理解所有自然语言。
+未来实现也不应试图一次理解所有自然语言。
+
+当前V1不包含Parser、Natural Language输入或Constraint Chips。Meal refinement继续使用现有确定性交互：
+
+```text
+Generate My Day
+Meal Regenerate
+Lock / Unlock
+Portion Edit
+Ingredient Swap
+```
 
 ---
 
@@ -2025,7 +2035,6 @@ components/
   NutritionSummary.tsx
   FoodCard.tsx
   FoodSelector.tsx
-  ConstraintChip.tsx
 
 pages/
   TodayPage.tsx
@@ -2203,7 +2212,7 @@ Phase 2.2不修改Meal Generator、candidate scoring、recipe templates、nutrit
 
 ---
 
-## Phase 4 — Natural Language
+## Phase 4 — Natural Language（Deferred / Not included in current V1）
 
 尚未实现：
 
@@ -2215,7 +2224,9 @@ Phase 2.2不修改Meal Generator、candidate scoring、recipe templates、nutrit
 * OCR / barcode
 * Backend / authentication / cloud
 
-Phase 4的产品范围保持不变，本次文档同步不提前实现或扩展该阶段。
+Phase 4的未来产品范围保持不变，但当前V1不包含Natural Language Planning。本阶段不保留任何Parser、Constraint Chips、自然语言UI或相应持久化状态。
+
+当前V1通过Generate、Lock / Unlock、Regenerate、Portion Edit和Ingredient Swap完成可控的meal refinement。
 
 ---
 

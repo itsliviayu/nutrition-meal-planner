@@ -1151,7 +1151,19 @@ Vegetables + Sauce。
 
 ---
 
-# 19. Natural Language Generation
+# 19. Natural Language Planning（Deferred）
+
+Natural Language Planning不包含在当前V1中。以下内容保留为未来版本的产品设想，不代表当前已实现或当前开发范围。
+
+当前V1使用以下结构化交互完成可控的meal refinement：
+
+* Generate My Day
+* Meal-level Regenerate
+* Lock / Unlock ingredient
+* Portion Edit
+* Recipe Detail中的Ingredient Swap
+
+未来如果重新启用Natural Language Planning，可考虑输入框：
 
 输入框：
 
@@ -1183,11 +1195,11 @@ inventoryOnly:
 
 ---
 
-# 20. Natural Language 功能难度
+# 20. Natural Language 未来功能范围（Deferred）
 
-V1并不需要真正的“AI Agent”。
+当前V1不实现Natural Language parser、Constraint Chips或自然语言条件生成。
 
-支持一组常用意图即可：
+未来版本如实现，可先支持一组常用意图：
 
 ### 时间
 
@@ -1222,11 +1234,11 @@ V1并不需要真正的“AI Agent”。
 
 ---
 
-实现难度：
+预计实现难度：
 
 **低—中等。**
 
-V1甚至可以先用：
+未来第一版可以先用：
 
 关键词 + rule parser
 
@@ -1254,7 +1266,7 @@ V1甚至可以先用：
 
 ---
 
-# 21. AI版本的自然语言
+# 21. AI版本的自然语言（Future）
 
 V1.1可以让LLM完成：
 
@@ -2003,7 +2015,7 @@ V4 → V5 migration为旧状态补充空的`shoppingItems`，并完整保留：
 
 Phase 3B Shopping已完成。本阶段只使用本地结构化数据与localStorage，不引入新的服务端能力。
 
-Phase 4尚未实现，包括：
+Natural Language Planning明确为`Deferred / Not included in current V1`。Phase 4尚未实现，包括：
 
 * Natural Language
 * Constraint Chips
@@ -2045,9 +2057,9 @@ Tailwind CSS
 
 ---
 
-# 39. V1自然语言实现
+# 39. Future Natural Language实现方向（Deferred）
 
-建议第一版：
+Natural Language Planning不属于当前V1。未来若重新进入开发范围，建议第一版：
 
 **不接LLM API。**
 
@@ -2075,7 +2087,7 @@ Meal Generator
 * 更稳定
 * 很容易debug
 
-等整个Planner逻辑稳定，再加LLM。
+等整个Planner逻辑稳定，并在后续阶段获得明确授权后，再决定是否加入LLM。
 
 ---
 
@@ -2134,13 +2146,19 @@ structured constraints
 
 ## P1 — V1最好有
 
-* Natural language condition parser
-* Constraint Chips
 * Shopping List
 * High-frequency ingredient recommendations
 * Favourite foods
 * Store标签
 * Composite foods
+
+---
+
+## Deferred — Not included in current V1
+
+* Natural language condition parser
+* Constraint Chips
+* Natural-language conditional generation
 
 ---
 
