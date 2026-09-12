@@ -3,6 +3,52 @@ import type { MealItem, MealType } from "./meal";
 import type { Nutrition, ServingUnit } from "./nutrition";
 import type { Equipment } from "./profile";
 
+export type CookingTechniqueId =
+  | "scramble"
+  | "omelette"
+  | "pan_sear"
+  | "stir_fry"
+  | "boil_and_assemble"
+  | "toast_topping"
+  | "cold_assemble"
+  | "oven_roast"
+  | "pasta_toss"
+  | "rice_bowl_assemble"
+  | "wrap_fill"
+  | "yogurt_bowl"
+  | "oat_bowl";
+
+export type CookingTechniqueRule =
+  | "egg_cook"
+  | "pan_cook"
+  | "stir_fry"
+  | "carb_assemble"
+  | "toast_topping"
+  | "cold_assemble"
+  | "oven_roast"
+  | "pasta"
+  | "rice"
+  | "wrap"
+  | "yogurt"
+  | "oats";
+
+export interface CookingTechnique {
+  id: CookingTechniqueId;
+  supportedMealTypes: MealType[];
+  compatibleBlueprintIds?: string[];
+  requiredEquipment: Equipment[];
+  cookingTime: number;
+  minIngredients: number;
+  maxIngredients: number;
+  requiredCategories?: FoodCategory[];
+  requiredAnyFoodIds?: string[];
+  requiredAllFoodIds?: string[];
+  excludedFoodIds?: string[];
+  allowedCategories?: FoodCategory[];
+  rule: CookingTechniqueRule;
+  tags: string[];
+}
+
 export interface RecipeSlot {
   id: string;
   type: FoodCategory | "specific";
@@ -24,6 +70,9 @@ export interface RecipeTemplate {
   instructionSteps: RecipeInstructionStep[];
   tags: string[];
 }
+
+/** Structural meal composition retained under its Phase 2/3 name for persistence compatibility. */
+export type MealBlueprint = RecipeTemplate;
 
 export interface RecipeNameRule {
   ingredientSlotIds: string[];
@@ -54,6 +103,7 @@ export interface GeneratedRecipeIngredient extends RecipeIngredientSnapshot {
 export interface GeneratedRecipe {
   name: string;
   sourceTemplateId: string;
+  techniqueId?: CookingTechniqueId;
   mealType: MealType;
   ingredients: GeneratedRecipeIngredient[];
   cookingTime: number;
@@ -67,6 +117,7 @@ export interface SavedRecipe {
   id: string;
   name: string;
   sourceTemplateId: string;
+  techniqueId?: CookingTechniqueId;
   mealType: MealType;
   ingredients: RecipeIngredientSnapshot[];
   cookingTime: number;
@@ -105,6 +156,7 @@ export interface MealNutritionTarget {
 
 export interface MealCandidate {
   template: RecipeTemplate;
+  technique: CookingTechnique;
   items: MealItem[];
   nutrition: Nutrition;
   fruitVegPortions: number;

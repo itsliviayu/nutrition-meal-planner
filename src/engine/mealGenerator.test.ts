@@ -8,6 +8,9 @@ import type {
 } from "../types";
 import { weightedRandomSelect } from "./candidateScoring";
 import { buildCandidatePool, generateMeal } from "./mealGenerator";
+import { cookingTechniques } from "../data/cookingTechniques";
+import { createUserFoodFromReference } from "../data/foodFactory";
+import { referenceFoods } from "../data/referenceFoods";
 
 const food = (id: string, category: Food["category"], overrides: Partial<Food> = {}): Food => ({
   id,
@@ -164,6 +167,7 @@ describe("mealGenerator hard constraints", () => {
 describe("weighted random selection", () => {
   const candidate = (id: string, score: number): MealCandidate => ({
     template: template({ id }),
+    technique: cookingTechniques[0],
     items: [],
     nutrition: { calories: 0, protein: 0, carbs: 0, fat: 0, fibre: 0 },
     fruitVegPortions: 0,
@@ -177,5 +181,108 @@ describe("weighted random selection", () => {
     const highRoll = weightedRandomSelect(candidates, () => 0.99)?.template.id;
     expect([lowRoll, highRoll].every((id) => id === "candidate-0" || id === "candidate-1")).toBe(true);
     expect(new Set([lowRoll, highRoll]).size).toBe(2);
+  });
+});
+
+const referenceUserFood = (referenceId: string, inStock = true): Food => createUserFoodFromReference(
+  referenceFoods.find((item) => item.id === referenceId)!,
+  { id: `user-${referenceId}`, inStock },
+);
+
+describe("standard-first relaxed composition", () => {
+  it("keeps standard blueprints ahead of relaxed candidates when a standard match exists", () => {
+    const result = generateMeal({
+      foods: [referenceUserFood("chicken-breast"), referenceUserFood("white-rice"), referenceUserFood("broccoli")],
+      constraints: constraints(),
+      target,
+      random: () => 0,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.meal.recipeTemplateId).not.toBe("relaxed-lunch");
+  });
+
+  it("uses a relaxed lunch composition when all standard blueprints fail", () => {
+    const result = generateMeal({
+      foods: [referenceUserFood("egg"), referenceUserFood("spinach")],
+      constraints: constraints(),
+      target,
+      random: () => 0,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.meal.recipeTemplateId).toBe("relaxed-lunch");
+      expect(["scramble", "omelette", "stir_fry"]).toContain(result.meal.techniqueId);
+    }
+  });
+
+  it("uses only in-stock User Foods in relaxed inventory generation", () => {
+    const available = [referenceUserFood("egg"), referenceUserFood("spinach")];
+    const unavailableToast = referenceUserFood("wholemeal-toast", false);
+    const result = generateMeal({
+      foods: [...available, unavailableToast],
+      constraints: constraints({ mealType: "breakfast", inventoryOnly: true }),
+      target,
+      random: () => 0,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.meal.items.map((item) => item.foodId)).not.toContain(unavailableToast.id);
+  });
+
+  it("never lets a direct Reference Food enter relaxed generation", () => {
+    const directReference = referenceFoods.find((item) => item.id === "broccoli")!;
+    const result = generateMeal({
+      foods: [referenceUserFood("egg"), referenceUserFood("spinach"), directReference],
+      constraints: constraints(),
+      target,
+      random: () => 0,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.meal.items.map((item) => item.foodId)).not.toContain(directReference.id);
+  });
+
+  it("preserves locked foods and portions in a relaxed candidate", () => {
+    const eggFood = referenceUserFood("egg");
+    const result = generateMeal({
+      foods: [eggFood, referenceUserFood("spinach")],
+      constraints: constraints({ lockedFoodIds: [eggFood.id] }),
+      lockedItems: [{ foodId: eggFood.id, amount: 145, unit: "g", locked: true }],
+      target,
+      random: () => 0,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.meal.items).toContainEqual({ foodId: eggFood.id, amount: 145, unit: "g", locked: true });
+  });
+
+  it("creates a meaningful relaxed single-food snack", () => {
+    const result = generateMeal({
+      foods: [referenceUserFood("banana")],
+      constraints: constraints({ mealType: "snack" }),
+      target,
+      random: () => 0,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.meal).toMatchObject({ recipeTemplateId: "relaxed-snack", techniqueId: "cold_assemble" });
+  });
+
+  it("does not reject a reasonable sparse meal solely for missing nutrition targets", () => {
+    const result = generateMeal({
+      foods: [referenceUserFood("egg"), referenceUserFood("spinach")],
+      constraints: constraints(),
+      target: { calories: { min: 1000, max: 1200 }, protein: { min: 100, max: 120 } },
+      random: () => 0,
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it("returns the clear inventory error when no minimum viable in-stock meal exists", () => {
+    const result = generateMeal({
+      foods: [referenceUserFood("banana", false)],
+      constraints: constraints({ inventoryOnly: true }),
+      target,
+    });
+    expect(result).toMatchObject({
+      ok: false,
+      message: "There aren’t enough suitable in-stock foods for this meal. Add a few foods or switch to Plan Freely.",
+    });
   });
 });

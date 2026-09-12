@@ -5,6 +5,7 @@ import { referenceFoods } from "../data/seedFoods";
 import { useLocale } from "../i18n/useLocale";
 import { useAppStore } from "../stores/useAppStore";
 import { createId } from "../utils/id";
+import { parseNumericDraft } from "../utils/foodFormDraft";
 
 interface ConfirmCommonFoodPageProps {
   referenceFoodId?: string;
@@ -16,7 +17,7 @@ export function ConfirmCommonFoodPage({ referenceFoodId, onDone, onBack }: Confi
   const { categoryName, referenceFoodName, t } = useLocale();
   const referenceFood = referenceFoods.find((food) => food.id === referenceFoodId);
   const addFood = useAppStore((state) => state.addFood);
-  const [defaultServing, setDefaultServing] = useState(referenceFood?.defaultServing ?? 100);
+  const [defaultServing, setDefaultServing] = useState(String(referenceFood?.defaultServing ?? 100));
   const [store, setStore] = useState("");
   const [inStock, setInStock] = useState(true);
   const [regularBuy, setRegularBuy] = useState(false);
@@ -29,13 +30,14 @@ export function ConfirmCommonFoodPage({ referenceFoodId, onDone, onBack }: Confi
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
-    if (!Number.isFinite(defaultServing) || defaultServing <= 0) {
+    const parsedServing = parseNumericDraft(defaultServing);
+    if (parsedServing === undefined || parsedServing <= 0) {
       setError(t("confirm.invalidServing"));
       return;
     }
     addFood(createUserFoodFromReference(referenceFood, {
       id: createId(),
-      defaultServing,
+      defaultServing: parsedServing,
       store,
       inStock,
       regularBuy,
@@ -51,10 +53,10 @@ export function ConfirmCommonFoodPage({ referenceFoodId, onDone, onBack }: Confi
         <div><span className="section-kicker">{t("confirm.referenceNutrition")}</span><h2>{referenceFoodName(referenceFood)}</h2><p>{categoryName(referenceFood.category)} · {t("common.standardEstimate")}</p></div>
       </section>
 
-      <PortionNutritionPreview food={referenceFood} amount={defaultServing} unit={referenceFood.servingUnit} />
+      <PortionNutritionPreview food={referenceFood} amount={parseNumericDraft(defaultServing) ?? 0} unit={referenceFood.servingUnit} />
 
       <section className="quick-confirm__fields">
-        <label className="field"><span>{t("confirm.defaultServing")}</span><div className="input-with-unit"><input type="number" inputMode="decimal" min="0.01" step="any" value={defaultServing} onChange={(event) => setDefaultServing(Number(event.target.value))} /><span>{referenceFood.servingUnit === "piece" ? t("confirm.pieces") : referenceFood.servingUnit}</span></div><small>{t("confirm.servingHelp")}</small></label>
+        <label className="field"><span>{t("confirm.defaultServing")}</span><div className="input-with-unit"><input type="number" inputMode="decimal" min="0.01" step="any" value={defaultServing} onChange={(event) => setDefaultServing(event.target.value)} /><span>{referenceFood.servingUnit === "piece" ? t("confirm.pieces") : referenceFood.servingUnit}</span></div><small>{t("confirm.servingHelp")}</small></label>
         <label className="field"><span>{t("confirm.store")} <em>{t("common.optional")}</em></span><input value={store} onChange={(event) => setStore(event.target.value)} placeholder={t("confirm.storePlaceholder")} /></label>
       </section>
 

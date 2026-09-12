@@ -68,6 +68,28 @@ const makePlan = (lockedVegetable = false): DailyPlan => recalculateDailyPlan({
   snack: mealFrom(["greek-yogurt", "banana"], "yogurt-snack", "snack"),
 }, foods, defaultProfile);
 
+const relaxedEggLunch = (techniqueId: "scramble" | "omelette"): MealPlan => ({
+  id: `relaxed-${techniqueId}`,
+  type: "lunch",
+  name: "Egg and spinach",
+  items: [byReferenceId("egg"), byReferenceId("spinach")].map((food) => ({
+    foodId: food.id,
+    amount: food.defaultServing,
+    unit: food.servingUnit,
+    locked: false,
+  })),
+  recipeTemplateId: "relaxed-lunch",
+  techniqueId,
+  nutrition: { calories: 0, protein: 0, carbs: 0, fat: 0, fibre: 0 },
+  cookingTime: techniqueId === "scramble" ? 10 : 12,
+  equipment: ["hob"],
+});
+
+const planWithRelaxedLunch = (techniqueId: "scramble" | "omelette"): DailyPlan => recalculateDailyPlan({
+  ...makePlan(),
+  lunch: relaxedEggLunch(techniqueId),
+}, foods, defaultProfile);
+
 const resetStore = (freePlan: DailyPlan, inventoryPlan: DailyPlan) => {
   useAppStore.setState({
     profile: defaultProfile,
@@ -181,5 +203,50 @@ describe("Saved Recipe snapshots", () => {
 
     expect(useAppStore.getState().savedRecipes).toEqual([]);
     expect(useAppStore.getState().dailyPlans).toBe(planBefore);
+  });
+});
+
+describe("mode-specific recipe variants", () => {
+  it("changes only the active meal technique while preserving ingredients and nutrition", () => {
+    const free = planWithRelaxedLunch("scramble");
+    const inventory = planWithRelaxedLunch("scramble");
+    resetStore(free, inventory);
+    const beforeItems = structuredClone(free.lunch.items);
+    const beforeNutrition = structuredClone(free.lunch.nutrition);
+
+    expect(useAppStore.getState().changeMealTechnique("lunch")).toBe(true);
+
+    const state = useAppStore.getState();
+    expect(state.dailyPlans.free!.lunch.techniqueId).toBe("omelette");
+    expect(state.dailyPlans.free!.lunch.items).toEqual(beforeItems);
+    expect(state.dailyPlans.free!.lunch.nutrition).toEqual(beforeNutrition);
+    expect(state.dailyPlans.inventory).toBe(inventory);
+  });
+
+  it("reselects a compatible technique when a swap invalidates the current one", () => {
+    const free = planWithRelaxedLunch("omelette");
+    resetStore(free, planWithRelaxedLunch("omelette"));
+
+    expect(useAppStore.getState().swapMealItem(
+      "lunch",
+      byReferenceId("egg").id,
+      byReferenceId("chicken-breast").id,
+    )).toBe(true);
+
+    const meal = useAppStore.getState().dailyPlans.free!.lunch;
+    expect(meal.techniqueId).not.toBe("omelette");
+    expect(["pan_sear", "stir_fry"]).toContain(meal.techniqueId);
+    expect(deriveGeneratedRecipe(meal, foods).name).not.toContain("Omelette");
+  });
+
+  it("can save two techniques for the same ingredient snapshot as distinct recipes", () => {
+    resetStore(planWithRelaxedLunch("scramble"), planWithRelaxedLunch("scramble"));
+    const scramble = deriveGeneratedRecipe(useAppStore.getState().dailyPlans.free!.lunch, foods);
+    useAppStore.getState().saveRecipe(scramble);
+    useAppStore.setState({ dailyPlans: { ...useAppStore.getState().dailyPlans, free: planWithRelaxedLunch("omelette") } });
+    const omelette = deriveGeneratedRecipe(useAppStore.getState().dailyPlans.free!.lunch, foods);
+    useAppStore.getState().saveRecipe(omelette);
+
+    expect(useAppStore.getState().savedRecipes.map((recipe) => recipe.techniqueId).sort()).toEqual(["omelette", "scramble"]);
   });
 });

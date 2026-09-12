@@ -12,11 +12,15 @@ export type {
   ShoppingNeedStatus,
 } from "./shopping";
 export type {
+  CookingTechnique,
+  CookingTechniqueId,
+  CookingTechniqueRule,
   GeneratorConstraints,
   GeneratorPreferences,
   GeneratedRecipe,
   GeneratedRecipeIngredient,
   MealCandidate,
+  MealBlueprint,
   MealNutritionTarget,
   RecipeIngredientSnapshot,
   RecipeInstructionStep,

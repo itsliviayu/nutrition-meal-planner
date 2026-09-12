@@ -1,4 +1,5 @@
 import { recipeTemplates } from "../data/recipeTemplates";
+import { relaxedMealBlueprints } from "../data/relaxedMealBlueprints";
 import type {
   Food,
   GeneratorConstraints,
@@ -17,6 +18,7 @@ import {
   resolveMealPortions,
 } from "./planNutrition";
 import { calculateMealNutrition } from "./nutritionCalculator";
+import { getCompatibleTechniques, selectDefaultTechnique } from "./cookingTechnique";
 
 export type MealGenerationFailureReason = "insufficient_foods" | "no_valid_combination";
 
@@ -54,9 +56,7 @@ export const filterTemplates = (
   templates: RecipeTemplate[],
   constraints: GeneratorConstraints,
 ): RecipeTemplate[] => templates.filter((template) =>
-  template.mealTypes.includes(constraints.mealType)
-  && (constraints.maxCookingTime === undefined || template.cookingTime <= constraints.maxCookingTime)
-  && template.equipment.every((item) => constraints.allowedEquipment.includes(item)),
+  template.mealTypes.includes(constraints.mealType),
 );
 
 export const buildCandidatePool = (
@@ -148,10 +148,11 @@ const buildCandidate = (
   pool: Food[],
   requiredFoods: Food[],
   lockedItems: MealItem[],
+  constraints: GeneratorConstraints,
   random: () => number,
-): MealCandidate | undefined => {
+): MealCandidate[] => {
   const selectedFoods = fillTemplateSlots(template, pool, requiredFoods, random);
-  if (!selectedFoods) return undefined;
+  if (!selectedFoods) return [];
   const lockedById = new Map(lockedItems.map((item) => [item.foodId, item]));
   const items = selectedFoods.map((food): MealItem => {
     const lockedItem = lockedById.get(food.id);
@@ -159,12 +160,25 @@ const buildCandidate = (
       ? { ...lockedItem, locked: true }
       : { foodId: food.id, amount: food.defaultServing, unit: food.servingUnit, locked: false };
   });
-  return {
+  const techniques = getCompatibleTechniques({
+    blueprint: template,
+    mealType: constraints.mealType,
+    foods: selectedFoods,
+    allowedEquipment: constraints.allowedEquipment,
+    maxCookingTime: constraints.maxCookingTime,
+  });
+  const preferred = selectDefaultTechnique(techniques, template.id);
+  const orderedTechniques = preferred
+    ? [preferred, ...techniques.filter((technique) => technique.id !== preferred.id)]
+    : techniques;
+  const calculated = calculateCandidateNutrition(items, pool);
+  return orderedTechniques.map((technique) => ({
     template,
+    technique,
     items,
-    ...calculateCandidateNutrition(items, pool),
+    ...calculated,
     score: 0,
-  };
+  }));
 };
 
 export const generateCandidates = (
@@ -172,6 +186,7 @@ export const generateCandidates = (
   pool: Food[],
   requiredFoods: Food[],
   lockedItems: MealItem[],
+  constraints: GeneratorConstraints,
   attempts: number,
   random: () => number,
 ): MealCandidate[] => {
@@ -180,12 +195,92 @@ export const generateCandidates = (
   const startIndex = templates.length ? randomIndex(templates.length, random) : 0;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const template = templates[(startIndex + attempt) % templates.length];
-    const candidate = buildCandidate(template, pool, requiredFoods, lockedItems, random);
-    if (!candidate) continue;
-    const key = `${template.id}:${candidate.items.map((item) => item.foodId).sort().join(",")}`;
-    candidates.set(key, candidate);
+    const variants = buildCandidate(template, pool, requiredFoods, lockedItems, constraints, random);
+    for (const candidate of variants) {
+      const key = `${template.id}:${candidate.technique.id}:${candidate.items.map((item) => item.foodId).sort().join(",")}`;
+      candidates.set(key, candidate);
+    }
   }
   return [...candidates.values()];
+};
+
+const relaxedCompositionIsMeaningful = (foods: Food[], mealType: GeneratorConstraints["mealType"]): boolean => {
+  const categories = new Set(foods.map((food) => food.category));
+  if (mealType === "lunch") {
+    return foods.length >= 2 && (
+      (categories.has("protein") && categories.has("carb"))
+      || (categories.has("protein") && categories.has("vegetable"))
+      || (foods.length >= 3 && categories.has("carb") && categories.has("vegetable"))
+    );
+  }
+  if (mealType === "breakfast") {
+    if (foods.length === 1) return categories.has("protein") || categories.has("carb") || categories.has("fruit") || categories.has("composite");
+    return categories.has("protein") || categories.has("carb") || categories.has("fruit");
+  }
+  if (foods.length === 1) return categories.has("fruit") || categories.has("protein") || categories.has("composite");
+  return categories.has("fruit") && categories.has("protein");
+};
+
+const combinations = <T>(values: T[], count: number, limit = 120): T[][] => {
+  const result: T[][] = [];
+  const visit = (start: number, selected: T[]) => {
+    if (result.length >= limit) return;
+    if (selected.length === count) {
+      result.push(selected);
+      return;
+    }
+    for (let index = start; index < values.length; index += 1) {
+      visit(index + 1, [...selected, values[index]]);
+      if (result.length >= limit) return;
+    }
+  };
+  visit(0, []);
+  return result;
+};
+
+export const generateRelaxedCandidates = (
+  pool: Food[],
+  requiredFoods: Food[],
+  lockedItems: MealItem[],
+  constraints: GeneratorConstraints,
+): MealCandidate[] => {
+  const blueprint = relaxedMealBlueprints.find((candidate) => candidate.mealTypes.includes(constraints.mealType));
+  if (!blueprint) return [];
+  const maximumItems = constraints.mealType === "lunch" ? 4 : constraints.mealType === "breakfast" ? 3 : 2;
+  const minimumItems = constraints.mealType === "lunch" ? 2 : 1;
+  if (requiredFoods.length > maximumItems) return [];
+  const requiredIds = new Set(requiredFoods.map((food) => food.id));
+  const choices = pool.filter((food) => !requiredIds.has(food.id));
+  const lockedById = new Map(lockedItems.map((item) => [item.foodId, item]));
+  const result = new Map<string, MealCandidate>();
+
+  for (let size = Math.max(minimumItems, requiredFoods.length); size <= maximumItems; size += 1) {
+    for (const extras of combinations(choices, size - requiredFoods.length)) {
+      const selectedFoods = [...requiredFoods, ...extras];
+      if (!relaxedCompositionIsMeaningful(selectedFoods, constraints.mealType)) continue;
+      const techniques = getCompatibleTechniques({
+        blueprint,
+        mealType: constraints.mealType,
+        foods: selectedFoods,
+        allowedEquipment: constraints.allowedEquipment,
+        maxCookingTime: constraints.maxCookingTime,
+      });
+      if (techniques.length === 0) continue;
+      const items = selectedFoods.map((food): MealItem => {
+        const locked = lockedById.get(food.id);
+        return locked
+          ? { ...locked, locked: true }
+          : { foodId: food.id, amount: food.defaultServing, unit: food.servingUnit, locked: false };
+      });
+      const calculated = calculateCandidateNutrition(items, pool);
+      for (const technique of techniques) {
+        const candidate: MealCandidate = { template: blueprint, technique, items, ...calculated, score: 0 };
+        const key = `${technique.id}:${items.map((item) => item.foodId).sort().join(",")}`;
+        result.set(key, candidate);
+      }
+    }
+  }
+  return [...result.values()];
 };
 
 const mealName = (candidate: MealCandidate, foods: Food[]): string => {
@@ -230,30 +325,29 @@ export const generateMeal = ({
     };
   }
 
-  if (pool.length < 2) {
-    return {
-      ok: false,
-      reason: "insufficient_foods",
-      message: "Add a few more foods to your library to create a balanced meal.",
-    };
-  }
-
   const availableTemplates = filterTemplates(templates, constraints);
-  const candidates = generateCandidates(
+  const standardCandidates = generateCandidates(
     availableTemplates,
     pool,
     requiredFoods,
     lockedItems,
+    constraints,
     attempts,
     random,
   );
+  const candidates = standardCandidates.length > 0
+    ? standardCandidates
+    : generateRelaxedCandidates(pool, requiredFoods, lockedItems, constraints);
   if (candidates.length === 0) {
+    const minimumFoodCount = constraints.mealType === "lunch" ? 2 : 1;
     return {
       ok: false,
-      reason: "no_valid_combination",
+      reason: pool.length < minimumFoodCount ? "insufficient_foods" : "no_valid_combination",
       message: requiredIds.length
         ? "No valid combination found with the current locked foods."
-        : "No meal combination matches the current time, equipment and food settings.",
+        : constraints.inventoryOnly
+          ? "There aren’t enough suitable in-stock foods for this meal. Add a few foods or switch to Plan Freely."
+          : "There aren’t enough suitable foods for this meal. Add a few foods to My Foods.",
     };
   }
 
@@ -274,9 +368,10 @@ export const generateMeal = ({
       name: mealName(selected, pool),
       items: selected.items,
       recipeTemplateId: selected.template.id,
+      techniqueId: selected.technique.id,
       nutrition: selected.nutrition,
-      cookingTime: selected.template.cookingTime,
-      equipment: [...selected.template.equipment],
+      cookingTime: selected.technique.cookingTime,
+      equipment: [...selected.technique.requiredEquipment],
     },
   };
 };

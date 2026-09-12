@@ -1,5 +1,6 @@
 import type { Nutrition, ServingUnit } from "./nutrition";
 import type { Equipment } from "./profile";
+import type { CookingTechniqueId } from "./recipe";
 
 export type MealType = "breakfast" | "lunch" | "snack";
 
@@ -16,6 +17,7 @@ export interface MealPlan {
   name: string;
   items: MealItem[];
   recipeTemplateId: string;
+  techniqueId?: CookingTechniqueId;
   nutrition: Nutrition;
   cookingTime: number;
   equipment: Equipment[];

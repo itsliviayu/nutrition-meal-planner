@@ -1,6 +1,6 @@
-import type { RecipeTemplate } from "../types";
+import type { MealBlueprint } from "../types";
 
-export const recipeTemplates: RecipeTemplate[] = [
+export const mealBlueprints: MealBlueprint[] = [
   {
     id: "eggs-toast-plate",
     name: "Eggs + Toast Plate",
@@ -285,3 +285,6 @@ export const recipeTemplates: RecipeTemplate[] = [
     ],
   },
 ];
+
+/** Backwards-compatible export for persisted recipeTemplateId references. */
+export const recipeTemplates = mealBlueprints;

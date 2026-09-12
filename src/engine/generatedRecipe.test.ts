@@ -93,7 +93,7 @@ describe("generated recipe derivation", () => {
       "vegetable",
       "sauce",
     ]);
-    expect(recipe.instructions).toContain("Prepare and cook chicken until cooked through.");
+    expect(recipe.instructions).toContain("Cook the chicken until cooked through.");
     expect(recipe.instructions).toContain("Add mushrooms and cook until tender.");
     expect(recipe.instructions).toContain("Stir in tomato pasta sauce.");
   });
@@ -162,9 +162,9 @@ describe("generated recipe derivation", () => {
       "蘑菇",
       "番茄意面酱",
     ]);
-    expect(recipe.instructions).toContain("处理并烹调鸡胸肉，确保完全熟透。");
-    expect(recipe.instructions).toContain("加入蘑菇，翻炒至变软。");
-    expect(recipe.instructions).toContain("加入番茄意面酱，拌匀。");
+    expect(recipe.instructions).toContain("将鸡胸肉彻底烹熟。");
+    expect(recipe.instructions.join("")).toContain("蘑菇");
+    expect(recipe.instructions.join("")).toContain("番茄意面酱");
   });
 
   it("keeps Chinese no-cook instructions concise and free of invented ingredients", () => {

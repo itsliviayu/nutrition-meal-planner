@@ -610,7 +610,7 @@ Close to target
 
 我们采用：
 
-# Recipe Template
+# Meal Blueprint（代码兼容名：RecipeTemplate）
 
 而不是：
 
@@ -646,7 +646,7 @@ Cream Sauce Slot
 
 ---
 
-# 13. RecipeTemplate 数据结构
+# 13. Meal Blueprint / RecipeTemplate 数据结构
 
 ```ts
 interface RecipeTemplate {
@@ -744,6 +744,29 @@ V1暂时不用很多。
 
 实际先做12–14个已经足够随机出很多组合。
 
+这14个对象现在作为结构性Meal Blueprints使用。为保持已有`recipeTemplateId`、Saved Recipe和V1数据兼容，代码继续保留`RecipeTemplate` / `recipeTemplates`名称，同时导出`MealBlueprint` / `mealBlueprints`语义别名。
+
+## CookingTechnique层
+
+```ts
+interface CookingTechnique {
+  id: CookingTechniqueId;
+  supportedMealTypes: MealType[];
+  compatibleBlueprintIds?: string[];
+  requiredEquipment: Equipment[];
+  cookingTime: number;
+  minIngredients: number;
+  maxIngredients: number;
+  requiredCategories?: FoodCategory[];
+  requiredAnyFoodIds?: string[];
+  allowedCategories?: FoodCategory[];
+  rule: CookingTechniqueRule;
+  tags: string[];
+}
+```
+
+Technique按scramble、omelette、pan sear、stir fry、boil/assemble、toast topping、cold assemble、oven roast、pasta toss、rice bowl assemble、wrap fill、yogurt bowl和oat bowl定义，不创建food-pair-specific templates。`cookingTechnique.ts`负责纯函数compatibility、默认选择及zh-CN/en确定性name/instruction builder。
+
 ---
 
 # 16. 为什么Template比AI Recipe重要
@@ -834,7 +857,7 @@ interface GeneratorConstraints {
 
 ---
 
-# 19. Generator第一步：过滤模板
+# 19. Generator第一步：过滤Blueprint并匹配Technique
 
 比如Lunch。
 
@@ -845,7 +868,7 @@ Breakfast templates
 Snack templates
 ```
 
-再根据：
+结构层先按meal type过滤Blueprint。选出actual ingredients后，再根据Technique的：
 
 ```text
 max cooking time
@@ -854,19 +877,38 @@ equipment
 
 过滤。
 
-例如：
+过滤兼容做法。例如：
 
 用户说：
 
 > 不想开烤箱
 
-则：
+则需要oven的`oven_roast`不可用；同一Blueprint若仍有不需要oven的合法technique，可以继续生成。
+
+Generator候选携带`template + technique + items`。设备与时间约束最终作用于selected technique，而不是把Blueprint名称误当作唯一烹饪方式。
+
+## Standard-first与Relaxed Composition
 
 ```text
-Oven Tray Meal
+Tier 1: 14个标准Blueprint正常slot matching
+→ 有候选：直接评分与选择
+→ 0候选：进入Tier 2
+
+Tier 2: Relaxed Composition
+→ Breakfast 1–3项
+→ Lunch 2–4项
+→ Snack 1–2项
+→ 仍需通过meaningful CookingTechnique compatibility
 ```
 
-直接排除。
+Relaxed层只消费与当前meal兼容的User Foods，继续应用inventoryOnly、locked/included/excluded foods、equipment和max time。它不直接读取Reference Foods，也不跳过nutrition engine。Nutrition Fit只参与排序，不作为稀疏库存的全候选淘汰条件。
+
+真正无法组成最低结构时返回明确错误：
+
+```text
+There aren’t enough suitable in-stock foods for this meal.
+Add a few foods or switch to Plan Freely.
+```
 
 ---
 
@@ -2043,6 +2085,8 @@ locale = isLocale(旧locale) ? 旧locale : "zh-CN"
 
 语言切换只执行`setLocale`，不得触发Generator、nutrition recomputation、库存更新、Shopping mutation或Saved Recipe snapshot更新。
 
+Recipe variant refinement增加可选的`MealPlan.techniqueId`与`SavedRecipe.techniqueId`。这是V6内部的向后兼容增量字段，不升级persist版本：旧MealPlan没有techniqueId时选择该composition的默认兼容technique；旧Saved Recipe没有techniqueId时保留并显示原name/instructions snapshot。不得清空或重写旧数据。
+
 ## Localization显示架构
 
 轻量i18n目录负责集中管理显示文案，不引入额外运行时框架：
@@ -2051,7 +2095,7 @@ locale = isLocale(旧locale) ? 旧locale : "zh-CN"
 src/i18n/
   translations.ts          # zh-CN / en translation keys
   foodNames.ts             # 83个Reference Food中文显示名
-  recipeLocalizations.ts   # 14个Recipe Template中文名称、后缀与步骤模板
+  recipeLocalizations.ts   # 旧Blueprint/Saved Recipe的本地化回退文案
   locale.ts                # t、Intl格式与显示名helper
   useLocale.ts             # React / Zustand adapter
 ```
@@ -2069,9 +2113,9 @@ custom User Food
 → 始终显示用户输入的food.name
 ```
 
-Generated Recipe的英文路径保持原有naming与instructions；中文路径使用相同`sourceTemplateId`、实际slot和actual ingredients进入中文deterministic templates。模板只能引用当前MealPlan中的ingredients，不允许翻译层补入油、黄油、芝士或其他不存在食材。
+Generated Recipe使用`sourceTemplateId + techniqueId + actual ingredients`进入zh-CN/en确定性builder。切换technique只更新name、instructions、cooking time与equipment display，不改变ingredients、portions、nutrition或locks。builder只能引用当前MealPlan中的ingredients，不允许补入油、黄油、芝士、奶油、酱汁或其他不存在食材。
 
-Saved Recipe的持久化snapshot保持原样。中文显示时以`sourceTemplateId`和ingredient的`foodId` / `referenceFoodId`安全重建display name与instructions；任一关键ingredient无法安全解析时整体回退保存时的name与instructions。该过程只生成view model，不修改snapshot。
+新Saved Recipe snapshot保存具体`techniqueId`并可按当前locale确定性重建display。旧snapshot没有techniqueId时不猜测variant，整体回退保存时的name与instructions。该过程只生成view model，不修改snapshot。
 
 日期使用`Intl.DateTimeFormat(locale)`；数值使用`Intl.NumberFormat(locale)`。`kcal`、`g`、`ml`保留通用单位写法。HTML `lang`、document title与description随locale更新；入口HTML提供mobile viewport、theme color及Apple web app基础meta，但不注册Service Worker、不引入PWA plugin。
 
@@ -2272,12 +2316,25 @@ Phase 2.2不修改Meal Generator、candidate scoring、recipe templates、nutrit
 * 集中的轻量`zh-CN` / `en`translation layer
 * Settings语言切换、即时更新与localStorage V6持久化
 * 83个Reference Food中文显示名，custom User Food名称原样保留
-* 14个Recipe Template中文名称与deterministic instruction templates
-* Generated Recipe按template与actual ingredients生成当前locale的名称和步骤
+* 14个Meal Blueprint与13个Cooking Technique的中文/英文确定性文案
+* Generated Recipe按blueprint、selected technique与actual ingredients生成当前locale的名称和步骤
 * Saved Recipe snapshot不变，并在可安全解析时生成本地化display view
 * Today、Foods、Add/Edit Food、Recipes、Recipe Detail、Shop、Settings及所有状态和控件完整本地化
 * `Intl`日期与数字格式
 * 约390px移动端布局检查和iPhone Add to Home Screen基础meta
+
+## Recipe Variant & Sparse Inventory Refinement
+
+已完成：
+
+* 14个Recipe Templates按Meal Blueprints使用
+* 13个通用Cooking Techniques与确定性compatibility
+* 同一ingredient composition可产生多个Recipe Variants
+* Recipe Detail仅在多种合法做法时显示“换个做法”
+* Ingredient Swap后重新校验并在必要时更换technique
+* 标准Blueprint为0时才启用Relaxed Composition
+* Add/Edit Food数字输入使用string draft，提交时才解析；新建营养字段默认空白
+* localStorage保持V6，旧plan与Saved Recipe安全回退
 
 本阶段不修改Nutrition Engine、Meal Generator核心、Shopping recommendation、库存模型或Saved Recipe持久化语义；不增加Service Worker、PWA框架或网络翻译服务。
 

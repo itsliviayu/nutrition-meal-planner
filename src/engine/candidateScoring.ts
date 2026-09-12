@@ -52,6 +52,7 @@ const preferenceFit = (
   }
   const tags = new Set([
     ...candidate.template.tags,
+    ...candidate.technique.tags,
     ...candidate.items.flatMap((item) => foodsById.get(item.foodId)?.tags ?? []),
   ]);
   if (preferences.sweet) scores.push(tags.has("sweet") ? 1 : 0);
@@ -85,9 +86,9 @@ export const scoreCandidate = (
   const templateFreshness = context.recentRecipeTemplateIds.slice(-6).includes(candidate.template.id) ? 0.35 : 1;
   const variety = freshFoodRatio * 0.7 + templateFreshness * 0.3;
   const maxTime = context.constraints.maxCookingTime ?? 30;
-  const convenience = candidate.template.cookingTime === 0
+  const convenience = candidate.technique.cookingTime === 0
     ? 1
-    : clamp01(1 - candidate.template.cookingTime / Math.max(1, maxTime) * 0.45);
+    : clamp01(1 - candidate.technique.cookingTime / Math.max(1, maxTime) * 0.45);
 
   return Math.round((
     nutritionFit(candidate, context.target) * 40

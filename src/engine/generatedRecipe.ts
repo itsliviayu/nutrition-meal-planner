@@ -1,4 +1,5 @@
 import { recipeTemplates } from "../data/recipeTemplates";
+import { relaxedMealBlueprints } from "../data/relaxedMealBlueprints";
 import { referenceFoods } from "../data/seedFoods";
 import { getFoodDisplayName, type Locale } from "../i18n/locale";
 import { recipeTemplateZh } from "../i18n/recipeLocalizations";
@@ -15,6 +16,7 @@ import type {
 } from "../types";
 import { createId } from "../utils/id";
 import { foodMatchesSlot } from "./mealGenerator";
+import { buildTechniqueRecipe, getCompatibleTechniques, selectDefaultTechnique } from "./cookingTechnique";
 import { isFibreDataComplete, resolveMealPortions } from "./planNutrition";
 
 interface ResolvedMealItem {
@@ -58,8 +60,22 @@ const joinNames = (names: string[], locale: Locale): string => {
 
 export const findRecipeTemplate = (
   recipeTemplateId: string,
-  templates: RecipeTemplate[] = recipeTemplates,
+  templates: RecipeTemplate[] = [...recipeTemplates, ...relaxedMealBlueprints],
 ): RecipeTemplate | undefined => templates.find((template) => template.id === recipeTemplateId);
+
+export const getMealCompatibleTechniques = (
+  meal: MealPlan,
+  foods: Food[],
+  templates?: RecipeTemplate[],
+) => {
+  const blueprint = findRecipeTemplate(meal.recipeTemplateId, templates);
+  if (!blueprint) return [];
+  const mealFoods = meal.items.flatMap((item) => {
+    const food = foods.find((candidate) => candidate.id === item.foodId);
+    return food ? [food] : [];
+  });
+  return getCompatibleTechniques({ blueprint, mealType: meal.type, foods: mealFoods });
+};
 
 export const mapMealItemsToSlots = (
   meal: MealPlan,
@@ -162,7 +178,7 @@ export const buildRecipeInstructions = (
 export const deriveGeneratedRecipe = (
   meal: MealPlan,
   foods: Food[],
-  templates: RecipeTemplate[] = recipeTemplates,
+  templates: RecipeTemplate[] = [...recipeTemplates, ...relaxedMealBlueprints],
   locale: Locale = "en",
 ): GeneratedRecipe => {
   const template = findRecipeTemplate(meal.recipeTemplateId, templates);
@@ -186,19 +202,30 @@ export const deriveGeneratedRecipe = (
       slotId: assignmentByFoodId.get(item.foodId)?.slot?.id,
     }];
   });
+  const mealFoods = meal.items.flatMap((item) => {
+    const food = foods.find((candidate) => candidate.id === item.foodId);
+    return food ? [food] : [];
+  });
+  const compatibleTechniques = template
+    ? getCompatibleTechniques({ blueprint: template, mealType: meal.type, foods: mealFoods })
+    : [];
+  const technique = compatibleTechniques.find((candidate) => candidate.id === meal.techniqueId)
+    ?? (template ? selectDefaultTechnique(compatibleTechniques, template.id) : undefined);
+  const variant = technique ? buildTechniqueRecipe(technique, mealFoods, locale) : undefined;
 
   return {
-    name: template ? buildGeneratedRecipeName(template, assignments, locale) : meal.name,
+    name: variant?.name ?? (template ? buildGeneratedRecipeName(template, assignments, locale) : meal.name),
     sourceTemplateId: meal.recipeTemplateId,
+    techniqueId: technique?.id,
     mealType: meal.type,
     ingredients,
-    cookingTime: meal.cookingTime,
-    equipment: [...meal.equipment],
-    instructions: template
+    cookingTime: technique?.cookingTime ?? meal.cookingTime,
+    equipment: [...(technique?.requiredEquipment ?? meal.equipment)],
+    instructions: variant?.instructions ?? (template
       ? buildRecipeInstructions(template, assignments, locale)
       : locale === "zh-CN"
         ? ["根据需要处理好列出的食材。", "组合装盘后即可食用。"]
-        : ["Prepare the listed ingredients as needed.", "Combine and serve."],
+        : ["Prepare the listed ingredients as needed.", "Combine and serve."]),
     nutrition: meal.nutrition,
     fibreDataComplete: isFibreDataComplete(resolveMealPortions(meal.items, foods)),
   };
@@ -214,7 +241,7 @@ export const deriveSavedRecipeDisplay = (
   foods: Food[],
   locale: Locale,
 ): SavedRecipeDisplay => {
-  if (locale === "en") return { name: recipe.name, instructions: recipe.instructions };
+  if (!recipe.techniqueId) return { name: recipe.name, instructions: recipe.instructions };
   const template = findRecipeTemplate(recipe.sourceTemplateId);
   if (!template) return { name: recipe.name, instructions: recipe.instructions };
   const resolvedFoods = recipe.ingredients.map((ingredient) => foods.find((food) => food.id === ingredient.foodId)
@@ -234,6 +261,7 @@ export const deriveSavedRecipeDisplay = (
       locked: false,
     })),
     recipeTemplateId: recipe.sourceTemplateId,
+    techniqueId: recipe.techniqueId,
     nutrition: recipe.nutrition,
     cookingTime: recipe.cookingTime,
     equipment: recipe.equipment,
@@ -243,6 +271,9 @@ export const deriveSavedRecipeDisplay = (
     id: recipe.ingredients[index].foodId,
   }));
   const assignments = mapMealItemsToSlots(displayMeal, displayFoods, template);
+  const technique = getMealCompatibleTechniques(displayMeal, displayFoods)
+    .find((candidate) => candidate.id === recipe.techniqueId);
+  if (technique) return buildTechniqueRecipe(technique, displayFoods, locale);
   return {
     name: buildGeneratedRecipeName(template, assignments, locale),
     instructions: buildRecipeInstructions(template, assignments, locale),
@@ -251,12 +282,14 @@ export const deriveSavedRecipeDisplay = (
 
 type RecipeSnapshotShape = {
   sourceTemplateId: string;
+  techniqueId?: string;
   mealType: string;
   ingredients: RecipeIngredientSnapshot[];
 };
 
 export const recipeSnapshotKey = (recipe: RecipeSnapshotShape): string => [
   recipe.sourceTemplateId,
+  recipe.techniqueId ?? "legacy",
   recipe.mealType,
   ...recipe.ingredients.map((ingredient) => [
     ingredient.foodId,
@@ -272,6 +305,7 @@ export const createSavedRecipeSnapshot = (
   id: options.id ?? `recipe-${createId()}`,
   name: recipe.name,
   sourceTemplateId: recipe.sourceTemplateId,
+  techniqueId: recipe.techniqueId,
   mealType: recipe.mealType,
   ingredients: recipe.ingredients.map(({ foodId, referenceFoodId, foodName, amount, unit }) => ({
     foodId,

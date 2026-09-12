@@ -9,7 +9,8 @@ import { generateDailyPlan as buildDailyPlan } from "../engine/dailyGenerator";
 import { generateMeal } from "../engine/mealGenerator";
 import { recalculateDailyPlan, updateMealItemPortion as updatePlanPortion } from "../engine/planNutrition";
 import { targetForMealRegeneration } from "../engine/dailyGenerator";
-import { createSavedRecipeSnapshot, deriveGeneratedRecipe, recipeSnapshotKey } from "../engine/generatedRecipe";
+import { createSavedRecipeSnapshot, deriveGeneratedRecipe, findRecipeTemplate, getMealCompatibleTechniques, recipeSnapshotKey } from "../engine/generatedRecipe";
+import { getCompatibleTechniques, selectDefaultTechnique } from "../engine/cookingTechnique";
 import { getIngredientSwapCandidates } from "../engine/recipeSwap";
 import { createShoppingItemsFromNeeds, mergeShoppingItems } from "../engine/shoppingEngine";
 import { DEFAULT_LOCALE, isLocale, type Locale } from "../i18n/locale";
@@ -62,6 +63,7 @@ export interface AppState {
   toggleMealItemLock: (mealType: MealType, foodId: string) => void;
   updateMealItemPortion: (mealType: MealType, foodId: string, amount: number) => void;
   swapMealItem: (mealType: MealType, foodId: string, replacementFoodId: string) => boolean;
+  changeMealTechnique: (mealType: MealType) => boolean;
   saveRecipe: (recipe: GeneratedRecipe) => SavedRecipe;
   deleteSavedRecipe: (id: string) => void;
   addShoppingNeeds: (needs: ShoppingNeed[], source: ShoppingItemSource) => void;
@@ -337,6 +339,8 @@ export const useAppStore = create<AppState>()(
           foods: state.foods,
           targetFoodId: foodId,
           planningMode: mode,
+          allowedEquipment: state.profile.equipment,
+          maxCookingTime: state.profile.defaultMaxCookingTime,
         }).find((candidate) => candidate.id === replacementFoodId);
         if (!replacement) return false;
 
@@ -356,7 +360,28 @@ export const useAppStore = create<AppState>()(
           state.foods,
           state.profile,
         );
-        const namedMeal = nextPlan[mealType];
+        const recalculatedMeal = nextPlan[mealType];
+        const blueprint = findRecipeTemplate(recalculatedMeal.recipeTemplateId);
+        const mealFoods = recalculatedMeal.items.flatMap((item) => {
+          const food = state.foods.find((candidate) => candidate.id === item.foodId);
+          return food ? [food] : [];
+        });
+        const techniques = blueprint ? getCompatibleTechniques({
+          blueprint,
+          mealType,
+          foods: mealFoods,
+          allowedEquipment: state.profile.equipment,
+          maxCookingTime: state.profile.defaultMaxCookingTime,
+        }) : [];
+        const technique = techniques.find((candidate) => candidate.id === meal.techniqueId)
+          ?? (blueprint ? selectDefaultTechnique(techniques, blueprint.id) : undefined);
+        if (blueprint && !technique) return false;
+        const namedMeal = {
+          ...recalculatedMeal,
+          techniqueId: technique?.id,
+          cookingTime: technique?.cookingTime ?? recalculatedMeal.cookingTime,
+          equipment: [...(technique?.requiredEquipment ?? recalculatedMeal.equipment)],
+        };
         const generatedRecipe = deriveGeneratedRecipe(namedMeal, state.foods);
         set({
           dailyPlans: {
@@ -364,6 +389,35 @@ export const useAppStore = create<AppState>()(
             [mode]: {
               ...nextPlan,
               [mealType]: { ...namedMeal, name: generatedRecipe.name },
+            },
+          },
+        });
+        return true;
+      },
+      changeMealTechnique: (mealType) => {
+        const state = get();
+        const activePlan = selectActiveDailyPlan(state);
+        if (!activePlan) return false;
+        const meal = activePlan[mealType];
+        const techniques = getMealCompatibleTechniques(meal, state.foods)
+          .filter((technique) => technique.cookingTime <= state.profile.defaultMaxCookingTime
+            && technique.requiredEquipment.every((item) => state.profile.equipment.includes(item)));
+        if (techniques.length < 2) return false;
+        const currentIndex = techniques.findIndex((technique) => technique.id === meal.techniqueId);
+        const technique = techniques[(currentIndex + 1 + techniques.length) % techniques.length];
+        const nextMeal = {
+          ...meal,
+          techniqueId: technique.id,
+          cookingTime: technique.cookingTime,
+          equipment: [...technique.requiredEquipment],
+        };
+        const generatedRecipe = deriveGeneratedRecipe(nextMeal, state.foods);
+        set({
+          dailyPlans: {
+            ...state.dailyPlans,
+            [state.activePlanningMode]: {
+              ...activePlan,
+              [mealType]: { ...nextMeal, name: generatedRecipe.name },
             },
           },
         });

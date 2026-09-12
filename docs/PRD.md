@@ -1004,6 +1004,8 @@ chicken
 
 ## Step 2：生成候选组合
 
+生成器先使用14个标准Meal Blueprints匹配完整结构。只有标准候选为0时，才进入Relaxed Composition，以meal type、FoodCategory、meal compatibility和tags组合更少但仍合理的食材，并要求至少一个兼容Cooking Technique。
+
 例如：
 
 Chicken
@@ -1062,7 +1064,8 @@ Sauce
 * Cooking time不得明显超过限制
 * Use What I Have开启时不得使用`inStock = false`的User Food
 * 任何Planning Mode都不得直接使用未加入My Foods的Reference Food
-* 营养目标不能严重偏离
+
+Nutrition Fit属于排序信号，不是把合理候选全部清零的Hard Constraint。尤其在稀疏库存下，应如实生成可吃的一餐并在Nutrition Overview显示偏低或偏高。
 
 ---
 
@@ -1296,46 +1299,28 @@ Structured JSON
 
 # 22. Recipe System
 
-菜谱不是提前把所有可能组合写死。
+V1采用两层确定性Recipe架构：
 
-采用：
+```text
+Ingredient Composition
+→ Meal Blueprint（现有RecipeTemplate兼容名称）
+→ Compatible Cooking Techniques
+→ Recipe Variant
+```
 
-# Recipe Family + Ingredient Slots
+14个既有templates作为Meal Blueprints保留，负责meal type、required/optional ingredient slots、category/tag compatibility和基本serving structure，不再把一组ingredients绑定为唯一做法。
 
-例如：
+Cooking Technique按通用烹饪方式定义，而不是按具体食物配对扩张。当前包括scramble、omelette、pan sear、stir fry、boil and assemble、toast topping、cold assemble、oven roast、pasta toss、rice bowl assemble、wrap fill、yogurt bowl和oat bowl。
 
-## Creamy Pasta
-
-需要：
-
-* Protein
-* Pasta
-* Vegetable
-* Cream Sauce
-
-允许：
-
-Protein：
-
-Chicken / Shrimp / Salmon
-
-Vegetable：
-
-Mushroom / Spinach / Broccoli
-
-于是同一个 Recipe Family 可以生成：
-
-Chicken Mushroom Creamy Pasta
-
-Shrimp Spinach Creamy Pasta
-
-Salmon Broccoli Creamy Pasta
+Technique compatibility由actual User Foods、FoodCategory、tags、blueprint slots、meal type、equipment和max cooking time确定。禁止使用LLM判断，也不得加入MealPlan中不存在的油、黄油、芝士、奶油或酱料。
 
 ---
 
 # 23. 动态 Recipe
 
-Generator确定：
+Generator确定ingredients、portions、blueprint与selected technique。例如同一组Egg + Spinach + Toast可以派生scramble、omelette或toast topping variant；切换variant不改变ingredients、portions、nutrition、locks或planning mode。
+
+例如一个variant确定：
 
 Chicken 140g
 Pasta 75g
@@ -1967,9 +1952,9 @@ Reference Food与User Food的名称规则保持数据边界：
 * 用户自行创建的Custom Food始终原样显示用户输入名称，不自动翻译
 * 找不到安全映射时回退到已有名称
 
-14个Recipe Templates提供中英文名称与确定性instruction templates。Generated Recipe继续由template和实际ingredients组合名称与步骤，不对完整英文句子做运行时机器翻译，也不引入MealPlan中不存在的食材。
+14个Meal Blueprints与13个Cooking Techniques共同提供中英文确定性名称和步骤。Generated Recipe由actual ingredients、selected technique与serving structure组合，不对完整句子做运行时机器翻译，也不引入MealPlan中不存在的食材。
 
-Saved Recipe继续保存原有snapshot。显示层可根据`sourceTemplateId`和可安全解析的ingredient reference生成当前语言的名称与步骤；无法安全解析时回退到旧snapshot，不迁移、不覆盖已有保存内容。
+Saved Recipe保存具体`techniqueId` variant。旧Saved Recipe没有`techniqueId`时直接回退原有name/instructions snapshot，不迁移、不覆盖已有保存内容。
 
 移动端继续以约390px宽度为基准，保证主要导航、表单、Meal Card、Shopping actions和语言切换不横向溢出。V1仅补充适合iPhone浏览器与Add to Home Screen的基础meta信息，不增加Service Worker、离线缓存或PWA框架。
 
@@ -2000,6 +1985,8 @@ Phase 3A新增`savedRecipes` snapshot persistence，因此persist版本从V3升�
 Phase 3B新增`shoppingItems`，因此persist版本从V4升级为V5。Missing Ingredients、Buy Again与Try Something New均即时派生，不持久化为容易过期的重复状态。
 
 Phase 4新增用户语言偏好`locale`，因此persist版本从V5升级为V6。`locale`只影响显示；没有有效语言值的旧状态默认迁移为`zh-CN`。
+
+Blueprint/Technique refinement为`MealPlan`和`SavedRecipe`增加可选`techniqueId`。该字段是向后兼容的嵌套元数据；旧plan可确定性选择默认兼容technique，旧Saved Recipe回退原snapshot，因此persist版本保持V6，不清空、不重建localStorage。
 
 V2 → V3 migration：
 
@@ -2055,7 +2042,7 @@ locale = valid persisted locale ?? "zh-CN"
 
 ## 当前阶段状态
 
-Phase 4 Chinese Localization & Mobile Readiness已完成。当前产品支持中文与英文即时切换、83个Reference Food中文显示、14个Recipe Template及deterministic generated recipe中英文显示、Saved Recipe安全本地化，以及约390px移动端与基础Add to Home Screen meta适配。所有能力仍只使用本地结构化数据与localStorage，不引入新的服务端能力。
+Phase 4 Chinese Localization & Mobile Readiness已完成。当前产品支持中文与英文即时切换、83个Reference Food中文显示、14个Meal Blueprints + 13个Cooking Techniques的deterministic recipe variants、Saved Recipe variant snapshot，以及约390px移动端与基础Add to Home Screen meta适配。Meal Generator在标准blueprint无候选时支持relaxed composition，Recipe Detail可在兼容做法之间切换；所有能力仍只使用本地结构化数据与localStorage，不引入新的服务端能力。
 
 Natural Language Planning明确为`Deferred / Not included in current V1`，不属于当前Localization阶段。尚未实现的能力包括：
 

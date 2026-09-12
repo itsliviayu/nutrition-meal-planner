@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { defaultProfile } from "../data/defaultProfile";
 import { initialUserFoods } from "../data/initialFoods";
 import { referenceFoods } from "../data/referenceFoods";
+import { createUserFoodFromReference } from "../data/foodFactory";
 import { generateDailyPlan } from "./dailyGenerator";
 
 describe("dailyGenerator", () => {
@@ -49,5 +50,25 @@ describe("dailyGenerator", () => {
     });
     expect(signatures).toHaveLength(4);
     expect(new Set(signatures).size).toBeGreaterThan(1);
+  });
+
+  it("can build all three meals from a sparse in-stock egg and spinach inventory", () => {
+    const foods = ["egg", "spinach"].map((id) => createUserFoodFromReference(
+      referenceFoods.find((food) => food.id === id)!,
+      { id: `user-${id}`, inStock: true },
+    ));
+    const result = generateDailyPlan({
+      foods,
+      profile: defaultProfile,
+      inventoryOnly: true,
+      random: () => 0,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.plan.breakfast.items.length).toBeGreaterThan(0);
+    expect(result.plan.lunch.items.length).toBeGreaterThan(0);
+    expect(result.plan.snack.items.length).toBeGreaterThan(0);
+    expect(result.plan.breakfast.items.concat(result.plan.lunch.items, result.plan.snack.items)
+      .every((item) => foods.some((food) => food.id === item.foodId && food.inStock))).toBe(true);
   });
 });

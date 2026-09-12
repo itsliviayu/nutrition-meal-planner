@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { deriveGeneratedRecipe, deriveSavedRecipeDisplay, recipeSnapshotKey } from "../engine/generatedRecipe";
+import { deriveGeneratedRecipe, deriveSavedRecipeDisplay, getMealCompatibleTechniques, recipeSnapshotKey } from "../engine/generatedRecipe";
 import { getIngredientSwapCandidates } from "../engine/recipeSwap";
 import { getGeneratedRecipeNeeds, getSavedRecipeNeeds, shoppingIdentityKey } from "../engine/shoppingEngine";
 import { selectActiveDailyPlan, useAppStore } from "../stores/useAppStore";
@@ -100,13 +100,20 @@ export function RecipeDetailPage({ mealType, onBack }: { mealType?: MealType; on
   const foods = useAppStore((state) => state.foods);
   const dailyPlan = useAppStore(selectActiveDailyPlan);
   const activePlanningMode = useAppStore((state) => state.activePlanningMode);
+  const profile = useAppStore((state) => state.profile);
   const savedRecipes = useAppStore((state) => state.savedRecipes);
   const swapMealItem = useAppStore((state) => state.swapMealItem);
+  const changeMealTechnique = useAppStore((state) => state.changeMealTechnique);
   const saveRecipe = useAppStore((state) => state.saveRecipe);
   const [swapFoodId, setSwapFoodId] = useState<string>();
   const meal = mealType && dailyPlan ? dailyPlan[mealType] : undefined;
   const recipe = useMemo(() => meal ? deriveGeneratedRecipe(meal, foods, undefined, locale) : undefined, [locale, meal, foods]);
   const shoppingNeeds = useMemo(() => recipe ? getGeneratedRecipeNeeds(recipe, foods) : [], [recipe, foods]);
+  const compatibleTechniques = useMemo(() => meal
+    ? getMealCompatibleTechniques(meal, foods).filter((technique) =>
+      technique.cookingTime <= profile.defaultMaxCookingTime
+      && technique.requiredEquipment.every((item) => profile.equipment.includes(item)))
+    : [], [foods, meal, profile.defaultMaxCookingTime, profile.equipment]);
   const isSaved = recipe
     ? savedRecipes.some((saved) => recipeSnapshotKey(saved) === recipeSnapshotKey(recipe))
     : false;
@@ -128,6 +135,8 @@ export function RecipeDetailPage({ mealType, onBack }: { mealType?: MealType; on
       foods,
       targetFoodId: swapFoodId,
       planningMode: activePlanningMode,
+      allowedEquipment: profile.equipment,
+      maxCookingTime: profile.defaultMaxCookingTime,
     })
     : [];
 
@@ -143,6 +152,11 @@ export function RecipeDetailPage({ mealType, onBack }: { mealType?: MealType; on
         <p className="section-kicker">{t("recipe.mealRecipe", { meal: mealName(recipe.mealType) })}</p>
         <h2>{recipe.name}</h2>
         <p>{recipe.cookingTime} {t("common.minutes")} · {recipe.equipment.length ? recipe.equipment.map(equipmentName).join(" · ") : t("equipment.none")}</p>
+        {compatibleTechniques.length > 1 && (
+          <button className="recipe-technique-button" type="button" onClick={() => changeMealTechnique(meal.type)}>
+            <span aria-hidden="true">↻</span>{t("recipe.changeTechnique")}
+          </button>
+        )}
       </header>
 
       <RecipeNutrition recipe={recipe} />
