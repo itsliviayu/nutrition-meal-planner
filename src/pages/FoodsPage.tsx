@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { FoodCard } from "../components/FoodCard";
 import { Icon } from "../components/Icon";
+import { useLocale } from "../i18n/useLocale";
 import { useAppStore } from "../stores/useAppStore";
 import type { FoodCategory } from "../types";
 import { FOOD_CATEGORIES } from "../utils/foodOptions";
@@ -13,6 +14,7 @@ interface FoodsPageProps {
 type CategoryFilter = FoodCategory | "all";
 
 export function FoodsPage({ onAdd, onEdit }: FoodsPageProps) {
+  const { categoryName, foodName, t } = useLocale();
   const foods = useAppStore((state) => state.foods);
   const toggleInStock = useAppStore((state) => state.toggleInStock);
   const toggleFavourite = useAppStore((state) => state.toggleFavourite);
@@ -26,7 +28,7 @@ export function FoodsPage({ onAdd, onEdit }: FoodsPageProps) {
   const filteredFoods = useMemo(() => {
     const query = search.trim().toLocaleLowerCase();
     return foods.filter((food) => {
-      const matchesSearch = !query || [food.name, food.brand, food.store]
+      const matchesSearch = !query || [food.name, foodName(food), food.brand, food.store]
         .filter(Boolean)
         .some((value) => value?.toLocaleLowerCase().includes(query));
       return matchesSearch
@@ -35,44 +37,44 @@ export function FoodsPage({ onAdd, onEdit }: FoodsPageProps) {
         && (!favouritesOnly || food.favourite)
         && (!regularOnly || food.regularBuy);
     });
-  }, [category, favouritesOnly, foods, inStockOnly, regularOnly, search]);
+  }, [category, favouritesOnly, foodName, foods, inStockOnly, regularOnly, search]);
 
   return (
     <>
       <section className="intro-copy">
-        <p>Foods you eat and plan with. Mark what’s currently at home as In Stock.</p>
-        <span>{foods.length} foods · {foods.filter((food) => food.inStock).length} in stock</span>
+        <p>{t("foods.intro")}</p>
+        <span>{t("foods.count", { total: foods.length, stock: foods.filter((food) => food.inStock).length })}</span>
       </section>
 
       <label className="search-field">
         <Icon name="search" />
-        <span className="sr-only">Search foods</span>
-        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search foods, brands or stores" />
+        <span className="sr-only">{t("foods.searchA11y")}</span>
+        <input value={search} onChange={(event) => setSearch(event.target.value)} placeholder={t("foods.searchPlaceholder")} />
       </label>
 
-      <div className="filter-scroll" aria-label="Food category filters">
-        <button type="button" className={category === "all" ? "filter-chip is-active" : "filter-chip"} onClick={() => setCategory("all")}>All</button>
+      <div className="filter-scroll" aria-label={t("foods.categoryFilters")}>
+        <button type="button" className={category === "all" ? "filter-chip is-active" : "filter-chip"} onClick={() => setCategory("all")}>{t("foods.all")}</button>
         {FOOD_CATEGORIES.map((option) => (
           <button type="button" key={option.value} className={category === option.value ? "filter-chip is-active" : "filter-chip"} onClick={() => setCategory(option.value)}>
-            {option.label}
+            {categoryName(option.value)}
           </button>
         ))}
       </div>
 
-      <div className="filter-row" aria-label="Food status filters">
-        <button type="button" className={inStockOnly ? "toggle-filter is-active" : "toggle-filter"} aria-pressed={inStockOnly} onClick={() => setInStockOnly((value) => !value)}>In Stock</button>
-        <button type="button" className={favouritesOnly ? "toggle-filter is-active" : "toggle-filter"} aria-pressed={favouritesOnly} onClick={() => setFavouritesOnly((value) => !value)}>Favourite</button>
-        <button type="button" className={regularOnly ? "toggle-filter is-active" : "toggle-filter"} aria-pressed={regularOnly} onClick={() => setRegularOnly((value) => !value)}>Regular Buy</button>
+      <div className="filter-row" aria-label={t("foods.statusFilters")}>
+        <button type="button" className={inStockOnly ? "toggle-filter is-active" : "toggle-filter"} aria-pressed={inStockOnly} onClick={() => setInStockOnly((value) => !value)}>{t("common.inStock")}</button>
+        <button type="button" className={favouritesOnly ? "toggle-filter is-active" : "toggle-filter"} aria-pressed={favouritesOnly} onClick={() => setFavouritesOnly((value) => !value)}>{t("common.favourite")}</button>
+        <button type="button" className={regularOnly ? "toggle-filter is-active" : "toggle-filter"} aria-pressed={regularOnly} onClick={() => setRegularOnly((value) => !value)}>{t("common.regularBuy")}</button>
       </div>
 
       <div className="results-heading">
-        <span>{filteredFoods.length} {filteredFoods.length === 1 ? "result" : "results"}</span>
+        <span>{filteredFoods.length} {t(filteredFoods.length === 1 ? "common.result" : "common.results")}</span>
         {(search || category !== "all" || inStockOnly || favouritesOnly || regularOnly) && (
-          <button type="button" className="text-button" onClick={() => { setSearch(""); setCategory("all"); setInStockOnly(false); setFavouritesOnly(false); setRegularOnly(false); }}>Clear filters</button>
+          <button type="button" className="text-button" onClick={() => { setSearch(""); setCategory("all"); setInStockOnly(false); setFavouritesOnly(false); setRegularOnly(false); }}>{t("action.clearFilters")}</button>
         )}
       </div>
 
-      <section className="food-list" aria-label="Foods">
+      <section className="food-list" aria-label={t("foods.foodsA11y")}>
         {filteredFoods.map((food) => (
           <FoodCard
             key={food.id}
@@ -86,13 +88,13 @@ export function FoodsPage({ onAdd, onEdit }: FoodsPageProps) {
         {filteredFoods.length === 0 && (
           <div className="empty-state">
             <span aria-hidden="true">◌</span>
-            <h2>No foods found</h2>
-            <p>Try a different filter or add a food to your library.</p>
+            <h2>{t("foods.emptyTitle")}</h2>
+            <p>{t("foods.emptyBody")}</p>
           </div>
         )}
       </section>
 
-      <button className="floating-action" type="button" onClick={onAdd}><Icon name="plus" /> Add Food</button>
+      <button className="floating-action" type="button" onClick={onAdd}><Icon name="plus" /> {t("foods.add")}</button>
     </>
   );
 }

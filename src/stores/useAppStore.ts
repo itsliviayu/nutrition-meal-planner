@@ -12,6 +12,7 @@ import { targetForMealRegeneration } from "../engine/dailyGenerator";
 import { createSavedRecipeSnapshot, deriveGeneratedRecipe, recipeSnapshotKey } from "../engine/generatedRecipe";
 import { getIngredientSwapCandidates } from "../engine/recipeSwap";
 import { createShoppingItemsFromNeeds, mergeShoppingItems } from "../engine/shoppingEngine";
+import { DEFAULT_LOCALE, isLocale, type Locale } from "../i18n/locale";
 import type {
   DailyPlan,
   Food,
@@ -36,6 +37,7 @@ export interface ModeDailyPlans {
 }
 
 export interface AppState {
+  locale: Locale;
   profile: UserProfile;
   foods: Food[];
   dailyPlans: ModeDailyPlans;
@@ -45,6 +47,7 @@ export interface AppState {
   recentFoodIds: string[];
   recentRecipeTemplateIds: string[];
   generationMessage: string | null;
+  setLocale: (locale: Locale) => void;
   addFood: (food: Food) => void;
   addFoods: (foods: Food[]) => void;
   editFood: (id: string, updates: Partial<Food>) => void;
@@ -70,6 +73,7 @@ export interface AppState {
 }
 
 export interface PersistedAppData {
+  locale: Locale;
   profile: UserProfile;
   foods: Food[];
   dailyPlans: ModeDailyPlans;
@@ -87,7 +91,7 @@ export interface LegacyPersistedAppData {
 
 type PersistedAppInput = Partial<PersistedAppData> & Partial<LegacyPersistedAppData>;
 
-export const APP_STORAGE_VERSION = 5;
+export const APP_STORAGE_VERSION = 6;
 
 const emptyDailyPlans = (): ModeDailyPlans => ({ free: null, inventory: null });
 
@@ -112,6 +116,7 @@ export const normalizePersistedAppData = (
     };
 
   return {
+    locale: isLocale(persisted?.locale) ? persisted.locale : DEFAULT_LOCALE,
     profile: persisted?.profile ?? defaultProfile,
     foods: persisted?.foods ?? initialUserFoods,
     dailyPlans,
@@ -178,6 +183,7 @@ const planUsesFood = (plan: DailyPlan | null, foodId: string): boolean => plan
 export const useAppStore = create<AppState>()(
   persist(
     (set, get) => ({
+      locale: DEFAULT_LOCALE,
       profile: defaultProfile,
       foods: initialUserFoods,
       dailyPlans: emptyDailyPlans(),
@@ -187,6 +193,7 @@ export const useAppStore = create<AppState>()(
       recentFoodIds: [],
       recentRecipeTemplateIds: [],
       generationMessage: null,
+      setLocale: (locale) => set({ locale }),
       addFood: (food) => set((state) => ({ foods: [...state.foods, food] })),
       addFoods: (foods) => set((state) => ({ foods: [...state.foods, ...foods] })),
       editFood: (id, updates) => set((state) => {
@@ -461,6 +468,7 @@ export const useAppStore = create<AppState>()(
       version: APP_STORAGE_VERSION,
       storage: createJSONStorage(() => localStorage),
       partialize: ({
+        locale,
         profile,
         foods,
         dailyPlans,
@@ -470,6 +478,7 @@ export const useAppStore = create<AppState>()(
         recentFoodIds,
         recentRecipeTemplateIds,
       }) => ({
+        locale,
         profile,
         foods,
         dailyPlans,

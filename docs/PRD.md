@@ -1576,8 +1576,9 @@ Phase 3B已完成以下Shopping能力：
 
 * Shopping List
 * Missing Ingredients
-* Buy Again
-* Try Something New
+* Needed for Your Plan / 计划所需
+* Stock Up / 常备补货
+* Discover New Foods / 发现新食材
 * Mark as Bought
 
 Shopping继续沿用两层食品模型：Reference Food是系统只读参考数据，My Foods / User Food Library是用户认可并允许Meal Planner使用的食品。`In Stock`仍然只是User Food上的boolean状态，不创建第三套Food Library。
@@ -1717,9 +1718,15 @@ Personal Preference
 
 库存已有食品降低推荐权重。
 
-Phase 3B将推荐明确分为两个区域。
+当前Shopping信息架构在Shopping List下方明确分为三个职责不同的区域。
 
-## Buy Again
+## 计划所需 / Needed for Your Plan
+
+只读取`dailyPlans[activePlanningMode]`，收集当前plan实际使用且对应User Food为`inStock = false`的食品。Breakfast、Lunch和Snack之间按User Food去重，同时保留它用于哪些meal。这个集合不使用recommendation score。
+
+没有active DailyPlan时显示引导生成计划的empty state；已有plan但没有缺货时显示全部备齐。加入Shopping List后继续使用现有`current_plan`来源和去重语义。
+
+## 常备补货 / Stock Up
 
 候选严格来自：
 
@@ -1730,16 +1737,17 @@ My Foods AND inStock = false
 不包含尚未加入My Foods的Reference-only foods。排序使用确定性score：
 
 ```text
-Current Plan Need   35%
-Recipe Coverage     30%
-Regular Buy         15%
-Favourite           10%
-Meal Versatility    10%
+Recipe Coverage     40%
+Regular Buy         25%
+Meal Versatility    20%
+Favourite           15%
 ```
 
-其中Current Plan Need表示该食品是否补齐当前`dailyPlans.free`中的missing ingredient；Recipe Coverage表示它能匹配多少现有Recipe Template / slot。UI只显示推荐原因，不显示算法分数。
+常备补货不读取当前plan，也不包含Current Plan Need权重。如果某个食品同时属于当前计划所需，会从当前页面的常备补货候选中排除，避免重复。UI一次显示4项左右，只呈现由regular buy、favourite、meal versatility与recipe coverage形成的自然说明，不显示分数。
 
-## Try Something New
+候选池先按上述score稳定排序并截取高分的最多12项，再以每批4项确定性切换。`Show another set / 换一批`只切换当前页面的ephemeral页码，不随机重排、不持久化；不足一批时不显示。
+
+## 发现新食材 / Discover New Foods
 
 候选严格来自：
 
@@ -1747,7 +1755,7 @@ Meal Versatility    10%
 Reference Food Library MINUS My Foods
 ```
 
-推荐根据Recipe / slot compatibility、当前My Foods类别稀缺度、meal versatility、已有结构化category/tags提供的nutrition utility，以及与现有食品的相似度进行确定性排序。页面只展示少量结果，不替代完整Reference Food搜索。
+推荐根据Recipe / slot compatibility、当前My Foods类别稀缺度、meal versatility、已有结构化category/tags提供的nutrition utility，以及与现有食品的相似度进行确定性排序。页面从高分候选池每批显示约4项，可以使用与常备补货一致的ephemeral换一批交互，不替代完整Reference Food搜索。
 
 Try Something New只负责推荐，不扩大Meal Generator候选池。用户必须明确点击`Add to My Foods`，系统创建独立User Food copy后，该食品才进入planning pool。默认`inStock = false`；只有用户选择`Add & Mark In Stock`时才设置为true。
 
@@ -1911,6 +1919,13 @@ Settings作为右上角入口，不需要单独Bottom Tab。
 
 包含：
 
+## Language / 语言
+
+* 中文（`zh-CN`，全新安装默认）
+* English（`en`）
+
+用户选择后界面立即更新，并在本地持久化；切换语言不得改变Meal Plan、营养结果、库存、Shopping List或Saved Recipe snapshot。
+
 ## My Profile
 
 Height
@@ -1941,6 +1956,23 @@ Favourite foods
 
 Excluded foods
 
+## 36.1 Chinese Localization & Mobile Readiness
+
+当前V1提供完整的`zh-CN`与`en`显示层。所有用户可见的页面标题、导航、按钮、表单、状态、错误、空状态、Nutrition Overview、Planning Mode、Recipe与Shopping文案均通过集中translation keys提供，不在页面组件中散落语言判断。
+
+Reference Food与User Food的名称规则保持数据边界：
+
+* 83个Reference Foods使用系统维护的中英文名称映射；底层`id`、营养、来源和匹配字段不变
+* 从Reference Food创建的User Food可通过`referenceFoodId`显示当前语言的系统名称
+* 用户自行创建的Custom Food始终原样显示用户输入名称，不自动翻译
+* 找不到安全映射时回退到已有名称
+
+14个Recipe Templates提供中英文名称与确定性instruction templates。Generated Recipe继续由template和实际ingredients组合名称与步骤，不对完整英文句子做运行时机器翻译，也不引入MealPlan中不存在的食材。
+
+Saved Recipe继续保存原有snapshot。显示层可根据`sourceTemplateId`和可安全解析的ingredient reference生成当前语言的名称与步骤；无法安全解析时回退到旧snapshot，不迁移、不覆盖已有保存内容。
+
+移动端继续以约390px宽度为基准，保证主要导航、表单、Meal Card、Shopping actions和语言切换不横向溢出。V1仅补充适合iPhone浏览器与Add to Home Screen的基础meta信息，不增加Service Worker、离线缓存或PWA框架。
+
 ---
 
 # 37. 数据持久化
@@ -1952,7 +1984,7 @@ V1：
 当前持久化schema版本：
 
 ```text
-V5
+V6
 ```
 
 V2增加`referenceFoodId`和`nutritionSource`，并支持将Phase 1已保存的Food数据自动迁移，不清空或覆盖用户已有食品。
@@ -1966,6 +1998,8 @@ Phase 2.2将单个`dailyPlan`与`inventoryOnly`升级为`dailyPlans.free`、`dai
 Phase 3A新增`savedRecipes` snapshot persistence，因此persist版本从V3升级为V4。
 
 Phase 3B新增`shoppingItems`，因此persist版本从V4升级为V5。Missing Ingredients、Buy Again与Try Something New均即时派生，不持久化为容易过期的重复状态。
+
+Phase 4新增用户语言偏好`locale`，因此persist版本从V5升级为V6。`locale`只影响显示；没有有效语言值的旧状态默认迁移为`zh-CN`。
 
 V2 → V3 migration：
 
@@ -1993,6 +2027,14 @@ V4 → V5 migration为旧状态补充空的`shoppingItems`，并完整保留：
 * `savedRecipes`
 * recent generator history
 
+V5 → V6 migration：
+
+```text
+locale = valid persisted locale ?? "zh-CN"
+```
+
+迁移完整保留Profile、User Foods、两个DailyPlan、active mode、Saved Recipes、Shopping Items与recent history。语言切换不改写这些业务数据，Reference Foods与translation maps仍是只读静态数据，不写入localStorage。
+
 保存：
 
 * Profile
@@ -2013,9 +2055,9 @@ V4 → V5 migration为旧状态补充空的`shoppingItems`，并完整保留：
 
 ## 当前阶段状态
 
-Phase 3B Shopping已完成。本阶段只使用本地结构化数据与localStorage，不引入新的服务端能力。
+Phase 4 Chinese Localization & Mobile Readiness已完成。当前产品支持中文与英文即时切换、83个Reference Food中文显示、14个Recipe Template及deterministic generated recipe中英文显示、Saved Recipe安全本地化，以及约390px移动端与基础Add to Home Screen meta适配。所有能力仍只使用本地结构化数据与localStorage，不引入新的服务端能力。
 
-Natural Language Planning明确为`Deferred / Not included in current V1`。Phase 4尚未实现，包括：
+Natural Language Planning明确为`Deferred / Not included in current V1`，不属于当前Localization阶段。尚未实现的能力包括：
 
 * Natural Language
 * Constraint Chips

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useLocale } from "../i18n/useLocale";
 import { Icon } from "./Icon";
 
 export type AppRoute = "today" | "foods" | "recipes" | "shop" | "settings" | "add-food" | "confirm-food" | "custom-food" | "edit-food" | "recipe-detail" | "saved-recipe-detail";
@@ -13,20 +14,20 @@ interface AppShellProps {
   onBack?: () => void;
 }
 
-const navItems: Array<{ route: AppRoute; label: string; icon: "today" | "foods" | "recipes" | "shop" }> = [
-  { route: "today", label: "Today", icon: "today" },
-  { route: "foods", label: "Foods", icon: "foods" },
-  { route: "recipes", label: "Recipes", icon: "recipes" },
-  { route: "shop", label: "Shop", icon: "shop" },
-];
-
 export function AppShell({ route, title, eyebrow, children, onNavigate, showBack = false, onBack }: AppShellProps) {
+  const { t } = useLocale();
+  const navItems: Array<{ route: AppRoute; label: string; icon: "today" | "foods" | "recipes" | "shop" }> = [
+    { route: "today", label: t("nav.today"), icon: "today" },
+    { route: "foods", label: t("nav.foods"), icon: "foods" },
+    { route: "recipes", label: t("nav.recipes"), icon: "recipes" },
+    { route: "shop", label: t("nav.shop"), icon: "shop" },
+  ];
   return (
     <div className="app-shell">
       <header className="topbar">
         <div className="topbar__title-group">
           {showBack && (
-            <button className="icon-button back-button" type="button" onClick={onBack ?? (() => onNavigate("foods"))} aria-label="Go back">
+            <button className="icon-button back-button" type="button" onClick={onBack ?? (() => onNavigate("foods"))} aria-label={t("a11y.goBack")}>
               <Icon name="back" />
             </button>
           )}
@@ -36,7 +37,7 @@ export function AppShell({ route, title, eyebrow, children, onNavigate, showBack
           </div>
         </div>
         {!showBack && route !== "settings" && (
-          <button className="icon-button" type="button" onClick={() => onNavigate("settings")} aria-label="Open settings">
+          <button className="icon-button" type="button" onClick={() => onNavigate("settings")} aria-label={t("a11y.openSettings")}>
             <Icon name="settings" />
           </button>
         )}
@@ -45,7 +46,7 @@ export function AppShell({ route, title, eyebrow, children, onNavigate, showBack
       <main className="page-content">{children}</main>
 
       {!showBack && route !== "settings" && (
-        <nav className="bottom-nav" aria-label="Main navigation">
+        <nav className="bottom-nav" aria-label={t("nav.main")}>
           {navItems.map((item) => (
             <button
               type="button"

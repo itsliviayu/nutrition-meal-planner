@@ -5,6 +5,7 @@ export type { Equipment, Goal, TargetRange, UserProfile } from "./profile";
 export type {
   BuyAgainSuggestion,
   NewFoodSuggestion,
+  PlanNeededFood,
   ShoppingItem,
   ShoppingItemSource,
   ShoppingNeed,

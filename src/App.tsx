@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { AppShell, type AppRoute } from "./components/AppShell";
 import { AddFoodPage } from "./pages/AddFoodPage";
 import { ConfirmCommonFoodPage } from "./pages/ConfirmCommonFoodPage";
@@ -9,40 +9,47 @@ import { RecipesPage } from "./pages/RecipesPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { ShopPage } from "./pages/ShopPage";
 import { TodayPage } from "./pages/TodayPage";
+import { useLocale } from "./i18n/useLocale";
 import type { MealType } from "./types";
 
-const titles: Record<AppRoute, string> = {
-  today: "Today",
-  foods: "Food Library",
-  recipes: "Recipes",
-  shop: "Shop",
-  settings: "Settings",
-  "add-food": "Add Food",
-  "confirm-food": "Add Food",
-  "custom-food": "Custom Food",
-  "edit-food": "Edit Food",
-  "recipe-detail": "Recipe",
-  "saved-recipe-detail": "Saved Recipe",
-};
-
-const eyebrows: Partial<Record<AppRoute, string>> = {
-  foods: "Your ingredients",
-  settings: "Your preferences",
-  "add-food": "Food Library",
-  "confirm-food": "Quick add",
-  "custom-food": "Package or estimate",
-  "edit-food": "Food Library",
-  "recipe-detail": "Today",
-  "saved-recipe-detail": "My Recipes",
-};
-
 export default function App() {
+  const { locale, t } = useLocale();
   const [route, setRoute] = useState<AppRoute>("today");
   const [settingsReturnRoute, setSettingsReturnRoute] = useState<AppRoute>("today");
   const [editingFoodId, setEditingFoodId] = useState<string>();
   const [selectedReferenceFoodId, setSelectedReferenceFoodId] = useState<string>();
   const [selectedMealType, setSelectedMealType] = useState<MealType>();
   const [selectedSavedRecipeId, setSelectedSavedRecipeId] = useState<string>();
+
+  const titles: Record<AppRoute, string> = {
+    today: t("nav.today"),
+    foods: t("route.foodLibrary"),
+    recipes: t("nav.recipes"),
+    shop: t("nav.shop"),
+    settings: t("route.settings"),
+    "add-food": t("route.addFood"),
+    "confirm-food": t("route.addFood"),
+    "custom-food": t("route.customFood"),
+    "edit-food": t("route.editFood"),
+    "recipe-detail": t("route.recipe"),
+    "saved-recipe-detail": t("route.savedRecipe"),
+  };
+  const eyebrows: Partial<Record<AppRoute, string>> = {
+    foods: t("eyebrow.ingredients"),
+    settings: t("eyebrow.preferences"),
+    "add-food": t("route.foodLibrary"),
+    "confirm-food": t("eyebrow.quickAdd"),
+    "custom-food": t("eyebrow.packageOrEstimate"),
+    "edit-food": t("route.foodLibrary"),
+    "recipe-detail": t("eyebrow.today"),
+    "saved-recipe-detail": t("eyebrow.myRecipes"),
+  };
+
+  useEffect(() => {
+    document.documentElement.lang = locale;
+    document.title = t("app.title");
+    document.querySelector('meta[name="description"]')?.setAttribute("content", t("app.description"));
+  }, [locale, t]);
 
   const navigate = (nextRoute: AppRoute) => {
     if (nextRoute === "settings" && ["today", "foods", "recipes", "shop"].includes(route)) {

@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react";
-import { deriveGeneratedRecipe, recipeSnapshotKey } from "../engine/generatedRecipe";
+import { deriveGeneratedRecipe, deriveSavedRecipeDisplay, recipeSnapshotKey } from "../engine/generatedRecipe";
 import { getIngredientSwapCandidates } from "../engine/recipeSwap";
 import { getGeneratedRecipeNeeds, getSavedRecipeNeeds, shoppingIdentityKey } from "../engine/shoppingEngine";
 import { selectActiveDailyPlan, useAppStore } from "../stores/useAppStore";
+import { getReferenceFoodDisplayName } from "../i18n/locale";
+import { useLocale } from "../i18n/useLocale";
 import type {
   GeneratedRecipe,
-  GeneratedRecipeIngredient,
   MealType,
   RecipeIngredientSnapshot,
   ServingUnit,
@@ -13,46 +14,30 @@ import type {
   ShoppingNeed,
 } from "../types";
 
-const mealLabels: Record<MealType, string> = {
-  breakfast: "Breakfast",
-  lunch: "Lunch",
-  snack: "Evening snack",
-};
-
-const categoryLabels: Record<GeneratedRecipeIngredient["category"], string> = {
-  protein: "Protein",
-  carb: "Carb",
-  vegetable: "Vegetable",
-  fruit: "Fruit",
-  fat_sauce: "Fat & sauce",
-  composite: "Composite",
-};
-
-const unitLabel = (unit: ServingUnit): string => unit === "piece" ? "pc" : unit;
-const amountLabel = (ingredient: RecipeIngredientSnapshot): string =>
-  `${ingredient.amount}${unitLabel(ingredient.unit)}`;
-const equipmentLabel = (equipment: string[]): string =>
-  equipment.length ? equipment.map((item) => item[0].toUpperCase() + item.slice(1)).join(" · ") : "No special equipment";
-
+const unitLabel = (unit: ServingUnit, pieceLabel: string): string => unit === "piece" ? pieceLabel : unit;
+const amountLabel = (ingredient: RecipeIngredientSnapshot, pieceLabel: string): string =>
+  `${ingredient.amount}${unitLabel(ingredient.unit, pieceLabel)}`;
 function RecipeNutrition({ recipe }: { recipe: Pick<GeneratedRecipe, "nutrition" | "fibreDataComplete"> }) {
+  const { locale, t } = useLocale();
   const fibre = Math.round(recipe.nutrition.fibre ?? 0);
   return (
-    <section className="recipe-nutrition" aria-label="Recipe nutrition">
-      <div><span>Calories</span><strong>{Math.round(recipe.nutrition.calories)} <small>kcal</small></strong></div>
-      <div><span>Protein</span><strong>{Math.round(recipe.nutrition.protein)}<small>g</small></strong></div>
+    <section className="recipe-nutrition" aria-label={t("recipe.nutrition")}>
+      <div><span>{t("nutrition.calories")}</span><strong>{Math.round(recipe.nutrition.calories)} <small>kcal</small></strong></div>
+      <div><span>{t("nutrition.protein")}</span><strong>{Math.round(recipe.nutrition.protein)}<small>g</small></strong></div>
       <div>
-        <span>Fibre</span>
+        <span>{t("nutrition.fibre")}</span>
         <strong>{recipe.fibreDataComplete ? fibre : `≥${fibre}`}<small>g</small></strong>
-        {!recipe.fibreDataComplete && <small>Known AOAC fibre only</small>}
+        {!recipe.fibreDataComplete && <small>{t(locale === "zh-CN" ? "nutrition.partialDetail" : "nutrition.knownAoacOnly")}</small>}
       </div>
     </section>
   );
 }
 
 function RecipeMethod({ instructions }: { instructions: string[] }) {
+  const { t } = useLocale();
   return (
     <section className="recipe-section">
-      <p className="section-kicker">Method</p>
+      <p className="section-kicker">{t("recipe.method")}</p>
       <ol className="recipe-method">
         {instructions.map((instruction, index) => <li key={`${index}-${instruction}`}>{instruction}</li>)}
       </ol>
@@ -61,6 +46,7 @@ function RecipeMethod({ instructions }: { instructions: string[] }) {
 }
 
 function RecipeNeeds({ needs, source }: { needs: ShoppingNeed[]; source: ShoppingItemSource }) {
+  const { locale, t } = useLocale();
   const shoppingItems = useAppStore((state) => state.shoppingItems);
   const addShoppingNeeds = useAppStore((state) => state.addShoppingNeeds);
   const [isOpen, setIsOpen] = useState(false);
@@ -75,21 +61,21 @@ function RecipeNeeds({ needs, source }: { needs: ShoppingNeed[]; source: Shoppin
         aria-expanded={isOpen}
         onClick={() => setIsOpen((value) => !value)}
       >
-        <span><strong>What do I need?</strong><small>Check this recipe against what’s in stock.</small></span>
+        <span><strong>{t("recipe.whatNeed")}</strong><small>{t("recipe.checkStock")}</small></span>
         <span aria-hidden="true">{isOpen ? "−" : "+"}</span>
       </button>
       {isOpen && (
         <div className="recipe-needs__body">
           {needs.length === 0 ? (
-            <p className="recipe-needs__complete">You have everything you need.</p>
+            <p className="recipe-needs__complete">{t("recipe.everything")}</p>
           ) : (
             <>
-              <p className="section-kicker">You need</p>
+              <p className="section-kicker">{t("recipe.youNeed")}</p>
               <ul>
                 {needs.map((need) => (
                   <li key={shoppingIdentityKey(need)}>
-                    <span><strong>{need.displayName}</strong>{need.status === "stock_status_unavailable" && <small>Stock status unavailable</small>}</span>
-                    {need.amount !== undefined && need.unit && <span>{need.amount}{unitLabel(need.unit)}</span>}
+                    <span><strong>{getReferenceFoodDisplayName(need.referenceFoodId, need.displayName, locale)}</strong>{need.status === "stock_status_unavailable" && <small>{t("recipe.stockUnavailable")}</small>}</span>
+                    {need.amount !== undefined && need.unit && <span>{need.amount}{unitLabel(need.unit, t("common.pieceShort"))}</span>}
                   </li>
                 ))}
               </ul>
@@ -99,7 +85,7 @@ function RecipeNeeds({ needs, source }: { needs: ShoppingNeed[]; source: Shoppin
                 disabled={allAdded}
                 onClick={() => addShoppingNeeds(needs, source)}
               >
-                {allAdded ? "Added to Shopping List" : "Add Missing to Shopping List"}
+                {t(allAdded ? "recipe.addedShopping" : "recipe.addMissing")}
               </button>
             </>
           )}
@@ -110,6 +96,7 @@ function RecipeNeeds({ needs, source }: { needs: ShoppingNeed[]; source: Shoppin
 }
 
 export function RecipeDetailPage({ mealType, onBack }: { mealType?: MealType; onBack: () => void }) {
+  const { categoryName, equipmentName, foodName, locale, mealName, t } = useLocale();
   const foods = useAppStore((state) => state.foods);
   const dailyPlan = useAppStore(selectActiveDailyPlan);
   const activePlanningMode = useAppStore((state) => state.activePlanningMode);
@@ -118,7 +105,7 @@ export function RecipeDetailPage({ mealType, onBack }: { mealType?: MealType; on
   const saveRecipe = useAppStore((state) => state.saveRecipe);
   const [swapFoodId, setSwapFoodId] = useState<string>();
   const meal = mealType && dailyPlan ? dailyPlan[mealType] : undefined;
-  const recipe = useMemo(() => meal ? deriveGeneratedRecipe(meal, foods) : undefined, [meal, foods]);
+  const recipe = useMemo(() => meal ? deriveGeneratedRecipe(meal, foods, undefined, locale) : undefined, [locale, meal, foods]);
   const shoppingNeeds = useMemo(() => recipe ? getGeneratedRecipeNeeds(recipe, foods) : [], [recipe, foods]);
   const isSaved = recipe
     ? savedRecipes.some((saved) => recipeSnapshotKey(saved) === recipeSnapshotKey(recipe))
@@ -128,9 +115,9 @@ export function RecipeDetailPage({ mealType, onBack }: { mealType?: MealType; on
     return (
       <section className="empty-state">
         <span aria-hidden="true">○</span>
-        <h2>This recipe is no longer available</h2>
-        <p>Return to Today and open a meal from the current plan.</p>
-        <button className="primary-button" type="button" onClick={onBack}>Back to Today</button>
+        <h2>{t("recipe.unavailableTitle")}</h2>
+        <p>{t("recipe.unavailableBody")}</p>
+        <button className="primary-button" type="button" onClick={onBack}>{t("recipe.backToday")}</button>
       </section>
     );
   }
@@ -153,17 +140,17 @@ export function RecipeDetailPage({ mealType, onBack }: { mealType?: MealType; on
   return (
     <article className="recipe-detail">
       <header className="recipe-hero">
-        <p className="section-kicker">{mealLabels[recipe.mealType]} recipe</p>
+        <p className="section-kicker">{t("recipe.mealRecipe", { meal: mealName(recipe.mealType) })}</p>
         <h2>{recipe.name}</h2>
-        <p>{recipe.cookingTime} min · {equipmentLabel(recipe.equipment)}</p>
+        <p>{recipe.cookingTime} {t("common.minutes")} · {recipe.equipment.length ? recipe.equipment.map(equipmentName).join(" · ") : t("equipment.none")}</p>
       </header>
 
       <RecipeNutrition recipe={recipe} />
 
       <section className="recipe-section">
         <div className="recipe-section__heading">
-          <p className="section-kicker">Ingredients</p>
-          <span>{recipe.ingredients.length} items</span>
+          <p className="section-kicker">{t("recipe.ingredients")}</p>
+          <span>{recipe.ingredients.length} {t(recipe.ingredients.length === 1 ? "common.item" : "common.items")}</span>
         </div>
         <ul className="recipe-ingredients">
           {recipe.ingredients.map((ingredient) => {
@@ -174,9 +161,9 @@ export function RecipeDetailPage({ mealType, onBack }: { mealType?: MealType; on
                 <div className="recipe-ingredient-row">
                   <div>
                     <strong>{ingredient.foodName}</strong>
-                    <span>{categoryLabels[ingredient.category]}{ingredient.inStock ? " · In Stock" : ""}</span>
+                    <span>{categoryName(ingredient.category)}{ingredient.inStock ? ` · ${t("common.inStock")}` : ""}</span>
                   </div>
-                  <span>{amountLabel(ingredient)}</span>
+                  <span>{amountLabel(ingredient, t("common.pieceShort"))}</span>
                   <button
                     className="recipe-swap-button"
                     type="button"
@@ -184,23 +171,23 @@ export function RecipeDetailPage({ mealType, onBack }: { mealType?: MealType; on
                     aria-expanded={canSwap ? isOpen : undefined}
                     onClick={() => setSwapFoodId(isOpen ? undefined : ingredient.foodId)}
                   >
-                    {ingredient.locked ? "Locked" : "Swap"}
+                    {t(ingredient.locked ? "meal.locked" : "recipe.swap")}
                   </button>
                 </div>
-                {ingredient.locked && <small className="recipe-locked-note">Unlock this ingredient to swap it.</small>}
+                {ingredient.locked && <small className="recipe-locked-note">{t("recipe.unlockToSwap")}</small>}
                 {isOpen && (
-                  <div className="swap-panel" role="region" aria-label={`Swap ${ingredient.foodName}`}>
-                    <p>Swap {ingredient.foodName}</p>
+                  <div className="swap-panel" role="region" aria-label={t("recipe.swapName", { name: ingredient.foodName })}>
+                    <p>{t("recipe.swapName", { name: ingredient.foodName })}</p>
                     {swapCandidates.length ? (
                       <div className="swap-options">
                         {swapCandidates.map((candidate) => (
                           <button type="button" key={candidate.id} onClick={() => handleSwap(candidate.id)}>
-                            <span>{candidate.name}</span>
-                            <small>{categoryLabels[candidate.category]}{candidate.inStock ? " · In Stock" : ""}</small>
+                            <span>{foodName(candidate)}</span>
+                            <small>{categoryName(candidate.category)}{candidate.inStock ? ` · ${t("common.inStock")}` : ""}</small>
                           </button>
                         ))}
                       </div>
-                    ) : <span className="swap-empty">No compatible foods are available in My Foods.</span>}
+                    ) : <span className="swap-empty">{t("recipe.noSwap")}</span>}
                   </div>
                 )}
               </li>
@@ -214,9 +201,9 @@ export function RecipeDetailPage({ mealType, onBack }: { mealType?: MealType; on
       <RecipeMethod instructions={recipe.instructions} />
 
       <footer className="recipe-save-bar" aria-live="polite">
-        <div><strong>{isSaved ? "Saved to My Recipes" : "Keep this combination"}</strong><span>{isSaved ? "This exact recipe snapshot is saved." : "Save the ingredients, amounts and method as they are now."}</span></div>
-        <button className={isSaved ? "secondary-button" : "primary-button"} type="button" disabled={isSaved} onClick={() => saveRecipe(recipe)}>
-          {isSaved ? "Saved" : "Save Recipe"}
+        <div><strong>{t(isSaved ? "recipe.savedToRecipes" : "recipe.keepCombination")}</strong><span>{t(isSaved ? "recipe.snapshotSaved" : "recipe.saveDescription")}</span></div>
+        <button className={isSaved ? "secondary-button" : "primary-button"} type="button" disabled={isSaved} onClick={() => saveRecipe(deriveGeneratedRecipe(meal, foods))}>
+          {t(isSaved ? "common.saved" : "recipe.save")}
         </button>
       </footer>
     </article>
@@ -224,19 +211,21 @@ export function RecipeDetailPage({ mealType, onBack }: { mealType?: MealType; on
 }
 
 export function SavedRecipeDetailPage({ recipeId, onDeleted }: { recipeId?: string; onDeleted: () => void }) {
+  const { equipmentName, locale, mealName, t } = useLocale();
   const recipe = useAppStore((state) => state.savedRecipes.find((candidate) => candidate.id === recipeId));
   const foods = useAppStore((state) => state.foods);
   const deleteSavedRecipe = useAppStore((state) => state.deleteSavedRecipe);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const shoppingNeeds = useMemo(() => recipe ? getSavedRecipeNeeds(recipe, foods) : [], [recipe, foods]);
+  const display = useMemo(() => recipe ? deriveSavedRecipeDisplay(recipe, foods, locale) : undefined, [foods, locale, recipe]);
 
   if (!recipe) {
     return (
       <section className="empty-state">
         <span aria-hidden="true">○</span>
-        <h2>Saved recipe not found</h2>
-        <p>It may already have been removed from My Recipes.</p>
-        <button className="primary-button" type="button" onClick={onDeleted}>Back to Recipes</button>
+        <h2>{t("recipe.savedNotFound")}</h2>
+        <p>{t("recipe.savedNotFoundBody")}</p>
+        <button className="primary-button" type="button" onClick={onDeleted}>{t("recipe.backRecipes")}</button>
       </section>
     );
   }
@@ -249,22 +238,22 @@ export function SavedRecipeDetailPage({ recipeId, onDeleted }: { recipeId?: stri
   return (
     <article className="recipe-detail">
       <header className="recipe-hero">
-        <p className="section-kicker">Saved {mealLabels[recipe.mealType]} recipe</p>
-        <h2>{recipe.name}</h2>
-        <p>{recipe.cookingTime} min · {equipmentLabel(recipe.equipment)}</p>
+        <p className="section-kicker">{t("recipe.savedMealRecipe", { meal: mealName(recipe.mealType) })}</p>
+        <h2>{display?.name ?? recipe.name}</h2>
+        <p>{recipe.cookingTime} {t("common.minutes")} · {recipe.equipment.length ? recipe.equipment.map(equipmentName).join(" · ") : t("equipment.none")}</p>
       </header>
 
       <RecipeNutrition recipe={recipe} />
 
       <section className="recipe-section">
         <div className="recipe-section__heading">
-          <p className="section-kicker">Ingredients</p>
-          <span>{recipe.ingredients.length} items</span>
+          <p className="section-kicker">{t("recipe.ingredients")}</p>
+          <span>{recipe.ingredients.length} {t(recipe.ingredients.length === 1 ? "common.item" : "common.items")}</span>
         </div>
         <ul className="saved-recipe-ingredients">
           {recipe.ingredients.map((ingredient) => (
             <li key={`${ingredient.foodId}-${ingredient.amount}-${ingredient.unit}`}>
-              <strong>{ingredient.foodName}</strong><span>{amountLabel(ingredient)}</span>
+              <strong>{getReferenceFoodDisplayName(ingredient.referenceFoodId, ingredient.foodName, locale)}</strong><span>{amountLabel(ingredient, t("common.pieceShort"))}</span>
             </li>
           ))}
         </ul>
@@ -272,17 +261,17 @@ export function SavedRecipeDetailPage({ recipeId, onDeleted }: { recipeId?: stri
 
       <RecipeNeeds needs={shoppingNeeds} source="saved_recipe" />
 
-      <RecipeMethod instructions={recipe.instructions} />
+      <RecipeMethod instructions={display?.instructions ?? recipe.instructions} />
 
       <section className="saved-recipe-actions">
         {!confirmingDelete ? (
-          <button className="danger-button" type="button" onClick={() => setConfirmingDelete(true)}>Delete Saved Recipe</button>
+          <button className="danger-button" type="button" onClick={() => setConfirmingDelete(true)}>{t("recipe.deleteSaved")}</button>
         ) : (
           <div className="delete-confirmation" role="alert">
-            <div><strong>Delete this saved recipe?</strong><span>This removes only this snapshot from My Recipes.</span></div>
+            <div><strong>{t("recipe.deleteConfirm")}</strong><span>{t("recipe.deleteBody")}</span></div>
             <div>
-              <button className="secondary-button" type="button" onClick={() => setConfirmingDelete(false)}>Cancel</button>
-              <button className="danger-button" type="button" onClick={handleDelete}>Delete</button>
+              <button className="secondary-button" type="button" onClick={() => setConfirmingDelete(false)}>{t("action.cancel")}</button>
+              <button className="danger-button" type="button" onClick={handleDelete}>{t("action.delete")}</button>
             </div>
           </div>
         )}

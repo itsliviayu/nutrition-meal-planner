@@ -1,4 +1,5 @@
 import type { ReferenceFood } from "../types";
+import { getReferenceDisplayName, type Locale } from "../i18n/locale";
 import { commonReferenceFoods } from "./referenceFoods";
 
 export const POPULAR_REFERENCE_FOOD_IDS = [
@@ -21,27 +22,29 @@ const popularReferenceFoods = POPULAR_REFERENCE_FOOD_IDS.map((id) => {
   return food;
 });
 
-export const searchReferenceFoods = (query: string): ReferenceFood[] => {
+export const searchReferenceFoods = (query: string, locale: Locale = "en"): ReferenceFood[] => {
   const normalizedQuery = normalizeSearchText(query);
   if (!normalizedQuery) return popularReferenceFoods;
 
   return commonReferenceFoods
     .map((food) => {
       const name = normalizeSearchText(food.name);
+      const localizedName = normalizeSearchText(getReferenceDisplayName(food, locale));
       const aliases = food.aliases.map(normalizeSearchText);
-      const rank = name.startsWith(normalizedQuery)
+      const rank = localizedName.startsWith(normalizedQuery)
         ? 0
-        : aliases.some((alias) => alias.startsWith(normalizedQuery))
+        : name.startsWith(normalizedQuery) || aliases.some((alias) => alias.startsWith(normalizedQuery))
           ? 1
-          : name.includes(normalizedQuery)
+          : localizedName.includes(normalizedQuery)
             ? 2
-            : aliases.some((alias) => alias.includes(normalizedQuery))
+            : name.includes(normalizedQuery) || aliases.some((alias) => alias.includes(normalizedQuery))
               ? 3
               : -1;
       return { food, rank };
     })
     .filter(({ rank }) => rank >= 0)
-    .sort((a, b) => a.rank - b.rank || a.food.name.localeCompare(b.food.name))
+    .sort((a, b) => a.rank - b.rank
+      || getReferenceDisplayName(a.food, locale).localeCompare(getReferenceDisplayName(b.food, locale), locale))
     .slice(0, 12)
     .map(({ food }) => food);
 };

@@ -65,6 +65,7 @@ const shoppingItem: ShoppingItem = {
 
 const resetStore = (dailyPlans: ModeDailyPlans = { free: null, inventory: null }) => {
   useAppStore.setState({
+    locale: "zh-CN",
     profile: defaultProfile,
     foods: initialUserFoods,
     dailyPlans,
@@ -179,9 +180,10 @@ describe("mode-specific DailyPlan state", () => {
   });
 });
 
-describe("V5 persisted app data", () => {
+describe("V6 persisted app data", () => {
   it("restores both plans, the selected mode and Saved Recipes after a JSON round trip", () => {
     const saved: PersistedAppData = {
+      locale: "en",
       profile: defaultProfile,
       foods: initialUserFoods,
       dailyPlans: { free: freePlan, inventory: inventoryPlan },
@@ -199,6 +201,7 @@ describe("V5 persisted app data", () => {
     expect(restored.activePlanningMode).toBe("inventory");
     expect(restored.savedRecipes).toEqual([savedRecipe]);
     expect(restored.shoppingItems).toEqual([shoppingItem]);
+    expect(restored.locale).toBe("en");
   });
 
   it("adds Phase 2.2 defaults without overwriting existing foods or profile", () => {
@@ -210,6 +213,7 @@ describe("V5 persisted app data", () => {
     expect(restored.savedRecipes).toEqual([]);
     expect(restored.shoppingItems).toEqual([]);
     expect(restored.recentFoodIds).toEqual([]);
+    expect(restored.locale).toBe("zh-CN");
   });
 });
 
@@ -231,7 +235,7 @@ describe("V2 persistence migration", () => {
     }, 2);
     const otherMode: PlanningMode = expectedMode === "free" ? "inventory" : "free";
 
-    expect(APP_STORAGE_VERSION).toBe(5);
+    expect(APP_STORAGE_VERSION).toBe(6);
     expect(restored.activePlanningMode).toBe(expectedMode);
     expect(restored.dailyPlans[expectedMode]).toBe(freePlan);
     expect(restored.dailyPlans[otherMode]).toBeNull();
@@ -275,5 +279,44 @@ describe("V4 persistence migration", () => {
     expect(restored.shoppingItems).toEqual([]);
     expect(restored.foods).toBe(initialUserFoods);
     expect(restored.profile).toBe(defaultProfile);
+  });
+});
+
+describe("V5 to V6 locale migration", () => {
+  it("adds the default locale without changing existing V5 data", () => {
+    const restored = migratePersistedAppData({
+      profile: defaultProfile,
+      foods: initialUserFoods,
+      dailyPlans: { free: freePlan, inventory: inventoryPlan },
+      activePlanningMode: "inventory",
+      savedRecipes: [savedRecipe],
+      shoppingItems: [shoppingItem],
+      recentFoodIds: ["starter-egg"],
+      recentRecipeTemplateIds: ["egg-snack"],
+    }, 5);
+
+    expect(restored.locale).toBe("zh-CN");
+    expect(restored.profile).toBe(defaultProfile);
+    expect(restored.foods).toBe(initialUserFoods);
+    expect(restored.dailyPlans).toEqual({ free: freePlan, inventory: inventoryPlan });
+    expect(restored.activePlanningMode).toBe("inventory");
+    expect(restored.savedRecipes).toEqual([savedRecipe]);
+    expect(restored.shoppingItems).toEqual([shoppingItem]);
+    expect(restored.recentFoodIds).toEqual(["starter-egg"]);
+    expect(restored.recentRecipeTemplateIds).toEqual(["egg-snack"]);
+  });
+
+  it("switches locale without changing plans, nutrition, foods or stock", () => {
+    resetStore({ free: freePlan, inventory: inventoryPlan });
+    const before = useAppStore.getState();
+
+    before.setLocale("en");
+    const after = useAppStore.getState();
+
+    expect(after.locale).toBe("en");
+    expect(after.dailyPlans).toBe(before.dailyPlans);
+    expect(after.profile).toBe(before.profile);
+    expect(after.foods).toBe(before.foods);
+    expect(after.foods.map((food) => food.inStock)).toEqual(before.foods.map((food) => food.inStock));
   });
 });

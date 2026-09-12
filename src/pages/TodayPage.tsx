@@ -2,6 +2,8 @@ import { useRef, type PointerEvent as ReactPointerEvent } from "react";
 import { MealCard } from "../components/MealCard";
 import { NutritionSummary } from "../components/NutritionSummary";
 import { getMealMissingIngredients } from "../engine/shoppingEngine";
+import { formatTodayDate, localizeGenerationMessage } from "../i18n/locale";
+import { useLocale } from "../i18n/useLocale";
 import { selectActiveDailyPlan, useAppStore } from "../stores/useAppStore";
 import type { MealType } from "../types";
 import type { PlanningMode } from "../utils/planningMode";
@@ -23,15 +25,6 @@ const SWIPE_AXIS_RATIO = 1.35;
 const isInteractiveTarget = (target: EventTarget | null): boolean =>
   target instanceof Element && Boolean(target.closest("button, input, select, textarea, a, [role='button']"));
 
-const displayDate = (dateKey?: string): string => {
-  const date = dateKey ? new Date(`${dateKey}T12:00:00`) : new Date();
-  return new Intl.DateTimeFormat("en-GB", {
-    weekday: "long",
-    day: "numeric",
-    month: "short",
-  }).format(date);
-};
-
 function PlanningModeControl({
   mode,
   onChange,
@@ -39,9 +32,10 @@ function PlanningModeControl({
   mode: PlanningMode;
   onChange: (mode: PlanningMode) => void;
 }) {
+  const { t } = useLocale();
   return (
     <fieldset className="planning-mode">
-      <legend className="sr-only">Planning mode</legend>
+      <legend className="sr-only">{t("today.planningMode")}</legend>
       <div>
         <button
           type="button"
@@ -49,7 +43,7 @@ function PlanningModeControl({
           aria-pressed={mode === "free"}
           onClick={() => onChange("free")}
         >
-          Plan Freely
+          {t("today.planFreely")}
         </button>
         <button
           type="button"
@@ -57,7 +51,7 @@ function PlanningModeControl({
           aria-pressed={mode === "inventory"}
           onClick={() => onChange("inventory")}
         >
-          Use What I Have
+          {t("today.useWhatIHave")}
         </button>
       </div>
     </fieldset>
@@ -65,6 +59,7 @@ function PlanningModeControl({
 }
 
 export function TodayPage({ onOpenFoods, onOpenRecipe }: TodayPageProps) {
+  const { locale, t } = useLocale();
   const profile = useAppStore((state) => state.profile);
   const foods = useAppStore((state) => state.foods);
   const dailyPlan = useAppStore(selectActiveDailyPlan);
@@ -122,17 +117,17 @@ export function TodayPage({ onOpenFoods, onOpenRecipe }: TodayPageProps) {
     <div className="today-page">
       <section className="today-intro">
         <div>
-          <p className="today-date">{displayDate(dailyPlan?.date)}</p>
-          <p>{dailyPlan ? "A flexible plan built from your food library." : "Let your food library take the thinking out of today."}</p>
+          <p className="today-date">{formatTodayDate(dailyPlan?.date, locale)}</p>
+          <p>{t(dailyPlan ? "today.description" : "today.noPlanDescription")}</p>
         </div>
       </section>
 
       {generationMessage && (
         <section className="generation-notice" role="status">
-          <div><strong>We couldn't build that plan yet</strong><p>{generationMessage}</p></div>
+          <div><strong>{t("today.generationErrorTitle")}</strong><p>{localizeGenerationMessage(generationMessage, locale)}</p></div>
           <div>
-            <button type="button" className="text-button" onClick={clearGenerationMessage}>Dismiss</button>
-            <button type="button" className="secondary-button" onClick={onOpenFoods}>Go to Foods</button>
+            <button type="button" className="text-button" onClick={clearGenerationMessage}>{t("today.dismiss")}</button>
+            <button type="button" className="secondary-button" onClick={onOpenFoods}>{t("today.openFoods")}</button>
           </div>
         </section>
       )}
@@ -149,7 +144,7 @@ export function TodayPage({ onOpenFoods, onOpenRecipe }: TodayPageProps) {
         </div>
 
         {dailyPlan ? (
-          <section className="daily-meals" aria-label="Today's meals">
+          <section className="daily-meals" aria-label={t("today.meals")}>
             {renderMeal("breakfast")}
             {renderMeal("lunch")}
             {renderMeal("snack")}
@@ -157,20 +152,20 @@ export function TodayPage({ onOpenFoods, onOpenRecipe }: TodayPageProps) {
         ) : (
           <section className="today-empty">
             <div className="today-empty__art" aria-hidden="true"><span>○</span><span>△</span><span>□</span></div>
-            <p className="section-kicker">{activePlanningMode === "free" ? "Plan Freely" : "Use What I Have"}</p>
-            <h2>No plan for this mode yet</h2>
+            <p className="section-kicker">{t(activePlanningMode === "free" ? "today.planFreely" : "today.useWhatIHave")}</p>
+            <h2>{t("today.emptyTitle")}</h2>
             <p>{activePlanningMode === "free"
-              ? "Generate a balanced day using all foods in My Foods."
-              : "Generate a balanced day using foods currently marked In Stock."}</p>
-            <button className="primary-button generate-button" type="button" onClick={generateDailyPlan}>Generate My Day</button>
+              ? t("today.emptyFree")
+              : t("today.emptyInventory")}</p>
+            <button className="primary-button generate-button" type="button" onClick={generateDailyPlan}>{t("today.generate")}</button>
           </section>
         )}
       </div>
 
       {dailyPlan && (
         <section className="generate-panel">
-          <div><p className="section-kicker">Want a fresh direction?</p><h2>Generate another balanced day</h2></div>
-          <button className="primary-button generate-button" type="button" onClick={generateDailyPlan}>Generate My Day</button>
+          <div><p className="section-kicker">{t("today.freshDirection")}</p><h2>{t("today.generateAnother")}</h2></div>
+          <button className="primary-button generate-button" type="button" onClick={generateDailyPlan}>{t("today.generate")}</button>
         </section>
       )}
     </div>

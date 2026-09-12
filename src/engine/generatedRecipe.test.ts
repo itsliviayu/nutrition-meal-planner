@@ -8,6 +8,7 @@ import { resolveMealPortions } from "./planNutrition";
 import {
   createSavedRecipeSnapshot,
   deriveGeneratedRecipe,
+  deriveSavedRecipeDisplay,
   mapMealItemsToSlots,
 } from "./generatedRecipe";
 
@@ -144,5 +145,46 @@ describe("generated recipe derivation", () => {
     expect(saved.ingredients[0].amount).not.toBe(999);
     expect(saved.instructions[0]).not.toBe("Changed later");
     expect(saved.nutrition.calories).not.toBe(999);
+  });
+
+  it("builds a deterministic Chinese pasta name and instructions from actual ingredients", () => {
+    const meal = mealFrom(
+      ["pasta", "chicken-breast", "mushroom", "tomato-pasta-sauce"],
+      "pasta",
+      "lunch",
+    );
+    const recipe = deriveGeneratedRecipe(meal, foods, undefined, "zh-CN");
+
+    expect(recipe.name).toBe("鸡肉蘑菇意面");
+    expect(recipe.ingredients.map((ingredient) => ingredient.foodName)).toEqual([
+      "白意面",
+      "鸡胸肉",
+      "蘑菇",
+      "番茄意面酱",
+    ]);
+    expect(recipe.instructions).toContain("处理并烹调鸡胸肉，确保完全熟透。");
+    expect(recipe.instructions).toContain("加入蘑菇，翻炒至变软。");
+    expect(recipe.instructions).toContain("加入番茄意面酱，拌匀。");
+  });
+
+  it("keeps Chinese no-cook instructions concise and free of invented ingredients", () => {
+    const meal = mealFrom(["greek-yogurt", "banana"], "yogurt-bowl", "breakfast");
+    const recipe = deriveGeneratedRecipe(meal, foods, undefined, "zh-CN");
+
+    expect(recipe.name).toBe("香蕉希腊酸奶碗");
+    expect(recipe.instructions.join("")).toContain("无需烹饪");
+    expect(recipe.instructions.join("")).not.toMatch(/黄油|奶油|芝士|油/);
+  });
+
+  it("localizes a Saved Recipe from its template and ingredient snapshot without mutating it", () => {
+    const meal = mealFrom(["pasta", "chicken-breast", "mushroom"], "pasta", "lunch");
+    const saved = createSavedRecipeSnapshot(deriveGeneratedRecipe(meal, foods));
+    const snapshotBefore = structuredClone(saved);
+
+    const display = deriveSavedRecipeDisplay(saved, foods, "zh-CN");
+
+    expect(display.name).toBe("鸡肉蘑菇意面");
+    expect(display.instructions.join("")).toContain("白意面");
+    expect(saved).toEqual(snapshotBefore);
   });
 });

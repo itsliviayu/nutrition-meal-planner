@@ -6,9 +6,9 @@ import {
 } from "../data/foodFactory";
 import { searchReferenceFoods } from "../data/referenceFoodSearch";
 import { referenceFoods } from "../data/seedFoods";
+import { useLocale } from "../i18n/useLocale";
 import { useAppStore } from "../stores/useAppStore";
 import type { Food, ReferenceFood } from "../types";
-import { categoryLabel } from "../utils/foodOptions";
 
 interface AddFoodPageProps {
   onSelectReference: (referenceFoodId: string) => void;
@@ -24,6 +24,7 @@ const basisLabel = {
 };
 
 export function AddFoodPage({ onSelectReference, onAddCustom, onViewExisting, onMultiAddComplete }: AddFoodPageProps) {
+  const { categoryName, locale, referenceFoodName, t } = useLocale();
   const foods = useAppStore((state) => state.foods);
   const addFoods = useAppStore((state) => state.addFoods);
   const [search, setSearch] = useState("");
@@ -31,7 +32,7 @@ export function AddFoodPage({ onSelectReference, onAddCustom, onViewExisting, on
   const [multiSelect, setMultiSelect] = useState(false);
   const [selectedReferenceIds, setSelectedReferenceIds] = useState<string[]>([]);
 
-  const visibleReferences = useMemo(() => searchReferenceFoods(search), [search]);
+  const visibleReferences = useMemo(() => searchReferenceFoods(search, locale), [locale, search]);
   const existingReferenceIds = useMemo(() => new Set(
     referenceFoods
       .filter((reference) => findReferenceDuplicate(foods, reference))
@@ -74,32 +75,32 @@ export function AddFoodPage({ onSelectReference, onAddCustom, onViewExisting, on
   return (
     <div className="add-food-start">
       <section className="add-food-lead">
-        <h2>Start with something familiar</h2>
-        <p>Choose a common food and its reference nutrition is filled in for you.</p>
+        <h2>{t("addFood.leadTitle")}</h2>
+        <p>{t("addFood.leadBody")}</p>
       </section>
 
       <label className="search-field search-field--large">
         <Icon name="search" />
-        <span className="sr-only">Search common foods</span>
-        <input autoFocus value={search} onChange={(event) => { setSearch(event.target.value); setDuplicate(undefined); }} placeholder="Search common foods..." />
+        <span className="sr-only">{t("addFood.searchA11y")}</span>
+        <input autoFocus value={search} onChange={(event) => { setSearch(event.target.value); setDuplicate(undefined); }} placeholder={t("addFood.searchPlaceholder")} />
       </label>
 
       {!multiSelect && duplicate && (
         <aside className="duplicate-notice" role="status">
-          <div><strong>{duplicate.reference.name} is already in your food library.</strong><span>You can update the existing food or keep a separate copy.</span></div>
+          <div><strong>{t("addFood.duplicateTitle", { name: referenceFoodName(duplicate.reference) })}</strong><span>{t("addFood.duplicateBody")}</span></div>
           <div>
-            <button type="button" className="secondary-button" onClick={() => onViewExisting(duplicate.existing.id)}>View existing food</button>
-            <button type="button" className="text-button" onClick={() => onSelectReference(duplicate.reference.id)}>Add anyway</button>
+            <button type="button" className="secondary-button" onClick={() => onViewExisting(duplicate.existing.id)}>{t("addFood.viewExisting")}</button>
+            <button type="button" className="text-button" onClick={() => onSelectReference(duplicate.reference.id)}>{t("addFood.addAnyway")}</button>
           </div>
         </aside>
       )}
 
       <section className="common-food-section">
         <div className="list-heading">
-          <h2>Common foods</h2>
+          <h2>{t("addFood.commonFoods")}</h2>
           <div className="list-heading__actions">
-            <span>{search ? `${visibleReferences.length} matches` : "Popular picks"}</span>
-            <button type="button" className="text-button" onClick={toggleMultiSelect}>{multiSelect ? "Cancel" : "Select multiple"}</button>
+            <span>{search ? t("addFood.matches", { count: visibleReferences.length }) : t("addFood.popularPicks")}</span>
+            <button type="button" className="text-button" onClick={toggleMultiSelect}>{multiSelect ? t("action.cancel") : t("addFood.selectMultiple")}</button>
           </div>
         </div>
         <div className="reference-list">
@@ -119,39 +120,39 @@ export function AddFoodPage({ onSelectReference, onAddCustom, onViewExisting, on
                     disabled={alreadyAdded}
                     onChange={() => toggleReference(food.id)}
                   />
-                  <span className="reference-food-row__copy"><strong>{food.name}</strong><span>{categoryLabel(food.category)} · {alreadyAdded ? "Already added" : "Reference nutrition"}</span></span>
+                  <span className="reference-food-row__copy"><strong>{referenceFoodName(food)}</strong><span>{categoryName(food.category)} · {alreadyAdded ? t("addFood.alreadyAdded") : t("common.referenceNutrition")}</span></span>
                   <span className="reference-food-row__nutrition">≈{food.nutrition.calories}<small>kcal / {basisLabel[food.nutritionBasis]}</small></span>
-                  <span className="reference-food-row__selection" aria-hidden="true">{alreadyAdded ? "Added" : selected ? "✓" : ""}</span>
+                  <span className="reference-food-row__selection" aria-hidden="true">{alreadyAdded ? t("addFood.added") : selected ? "✓" : ""}</span>
                 </label>
               );
             }
             return (
               <button type="button" className="reference-food-row" key={food.id} onClick={() => selectReference(food)}>
-                <span className={`reference-food-row__mark category-dot--${food.category}`}>{food.name.charAt(0)}</span>
-                <span className="reference-food-row__copy"><strong>{food.name}</strong><span>{categoryLabel(food.category)} · Reference nutrition</span></span>
+                <span className={`reference-food-row__mark category-dot--${food.category}`}>{referenceFoodName(food).charAt(0)}</span>
+                <span className="reference-food-row__copy"><strong>{referenceFoodName(food)}</strong><span>{categoryName(food.category)} · {t("common.referenceNutrition")}</span></span>
                 <span className="reference-food-row__nutrition">≈{food.nutrition.calories}<small>kcal / {basisLabel[food.nutritionBasis]}</small></span>
                 <span className="reference-food-row__arrow" aria-hidden="true">›</span>
               </button>
             );
           })}
           {visibleReferences.length === 0 && (
-            <div className="common-empty"><strong>No common food matches “{search}”</strong><span>You can still add it using values from a package label or your own estimate.</span></div>
+            <div className="common-empty"><strong>{t("addFood.noMatchTitle", { query: search })}</strong><span>{t("addFood.noMatchBody")}</span></div>
           )}
         </div>
       </section>
 
       {multiSelect && (
         <div className="multi-add-bar">
-          <span>{selectedReferenceIds.length} selected</span>
+          <span>{t("addFood.selected", { count: selectedReferenceIds.length })}</span>
           <button className="primary-button" type="button" disabled={selectedReferenceIds.length === 0} onClick={addSelectedReferences}>
-            Add {selectedReferenceIds.length} to My Foods
+            {t("addFood.addSelected", { count: selectedReferenceIds.length })}
           </button>
         </div>
       )}
 
       <section className="custom-food-callout">
-        <div><span className="section-kicker">Can’t find it?</span><h2>Using a package label?</h2><p>Add a branded food, ready meal, sauce, or your own estimate with the full nutrition form.</p></div>
-        <button type="button" className="secondary-button" onClick={onAddCustom}>Add packaged or custom food <span aria-hidden="true">›</span></button>
+        <div><span className="section-kicker">{t("addFood.cantFind")}</span><h2>{t("addFood.packageTitle")}</h2><p>{t("addFood.packageBody")}</p></div>
+        <button type="button" className="secondary-button" onClick={onAddCustom}>{t("addFood.addCustom")} <span aria-hidden="true">›</span></button>
       </section>
     </div>
   );

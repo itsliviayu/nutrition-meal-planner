@@ -1399,12 +1399,13 @@ Ingredient Swap
 
 ## Smart Shopping
 
-Phase 3B的Shop页面由以下五项能力组成：
+当前Shop页面由以下能力组成：
 
 * Shopping List
 * Missing Ingredients
-* Buy Again
-* Try Something New
+* Needed for Your Plan
+* Stock Up
+* Discover New Foods
 * Mark as Bought
 
 Shopping List是唯一新增并持久化的Shopping状态。其记录来源支持：
@@ -1534,9 +1535,13 @@ Spinach：
 
 于是Chicken和Spinach优先。
 
-Phase 3B把Smart Shopping拆成两个互不混淆的候选池：
+Shopping推荐区拆成三个互不混淆的派生view：
 
-## Buy Again
+## Plan Needed
+
+输入为当前`dailyPlans[activePlanningMode]`与User Foods。遍历Breakfast、Lunch和Snack的MealItems，只保留可按`foodId`匹配且`inStock = false`的User Food，并按foodId去重、聚合`mealTypes`。它是事实集合，不计算score，也不保存独立missing state。
+
+## Stock Up
 
 候选必须满足：
 
@@ -1544,9 +1549,9 @@ Phase 3B把Smart Shopping拆成两个互不混淆的候选池：
 food ∈ My Foods AND food.inStock = false
 ```
 
-排序因素为current plan need、recipe coverage、regularBuy、favourite与meal versatility。它只推荐用户已经加入My Foods、当前不在库存中的食品。
+它只推荐用户已经加入My Foods、当前不在库存中的食品。排序完全独立于DailyPlan，使用recipe coverage、regularBuy、meal versatility与favourite。页面展示前排除同一批Plan Needed food IDs，避免重复。
 
-## Try Something New
+## Discover New Foods
 
 候选必须满足：
 
@@ -1558,31 +1563,31 @@ food ∈ Reference Foods AND food ∉ My Foods
 
 ---
 
-# 38. Shopping Score
+# 38. Stock Up Score与推荐批次
 
 第一版可以：
 
 ```text
 Shopping Score =
 
-Current Plan Need × 0.35
+Recipe Coverage × 0.40
 
 +
 
-Recipe Coverage × 0.30
+Regular Buy × 0.25
 
 +
 
-Regular Buy × 0.15
+Meal Versatility × 0.20
 
 +
 
-Favourite × 0.10
-
-+
-
-Meal Versatility × 0.10
+Favourite × 0.15
 ```
+
+Current Plan Need不再进入Stock Up score。`getBuyAgainSuggestions`只接收User Foods与Recipe Templates，保证ranking不依赖当前plan。
+
+Stock Up与Discover New Foods都先得到稳定排序的高分候选池（最多约12项），再由纯函数按每批4项切片。当前batch index只保存在ShopPage本地state；点击换一批进入下一组并在末尾循环，refresh回到第一批。候选不超过一批时不显示切换动作。
 
 ---
 
@@ -1880,10 +1885,17 @@ Shopping List
 
 ----------------
 
-Buy Again
+Needed for Your Plan
+
+Spinach
+Lunch · Needed for your current plan
+
+----------------
+
+Stock Up
 
 Chicken Breast
-Needed by current plan · Used across recipes
+Regular buy · Breakfast & Lunch
 
 Spinach
 Regular buy · Breakfast + Lunch
@@ -1893,7 +1905,7 @@ Breakfast · Lunch · Snack
 
 ----------------
 
-Try Something New
+Discover New Foods
 
 Reference foods not yet in My Foods
 
@@ -1963,7 +1975,7 @@ generateDailyPlan / regenerateMeal / toggleMealItemLock / updateMealItemPortion
 当前persist版本为：
 
 ```text
-V5
+V6
 ```
 
 V2最初引入的Food迁移规则继续保留：
@@ -2021,7 +2033,47 @@ shoppingItems = 旧shoppingItems ?? []
 * `savedRecipes`
 * recent food / recipe-template history
 
-V5持久化的应用数据包括Profile、User Foods、两个mode-specific DailyPlan、active mode、Saved Recipes、Shopping Items与recent history。Reference Foods仍是只读静态数据，不写入localStorage。
+Phase 4新增显示偏好`locale: "zh-CN" | "en"`，persist版本从V5升级为V6。V5 → V6 migration规则：
+
+```text
+locale = isLocale(旧locale) ? 旧locale : "zh-CN"
+```
+
+迁移必须完整保留Profile、User Foods、两个mode-specific DailyPlan、active mode、Saved Recipes、Shopping Items与recent history。V6持久化数据只比V5多一个locale；Reference Foods、translation maps与Recipe Template localization仍是只读静态数据，不写入localStorage。
+
+语言切换只执行`setLocale`，不得触发Generator、nutrition recomputation、库存更新、Shopping mutation或Saved Recipe snapshot更新。
+
+## Localization显示架构
+
+轻量i18n目录负责集中管理显示文案，不引入额外运行时框架：
+
+```text
+src/i18n/
+  translations.ts          # zh-CN / en translation keys
+  foodNames.ts             # 83个Reference Food中文显示名
+  recipeLocalizations.ts   # 14个Recipe Template中文名称、后缀与步骤模板
+  locale.ts                # t、Intl格式与显示名helper
+  useLocale.ts             # React / Zustand adapter
+```
+
+页面和组件使用semantic translation keys与display helpers。业务enum、Food ID、referenceFoodId、nutrition values、category matching、template slot和Generator规则全部保持语言无关。
+
+Food名称解析顺序：
+
+```text
+reference-linked User Food / Reference Food
+→ 按referenceFoodId读取当前locale名称
+→ 无映射时fallback现有food.name
+
+custom User Food
+→ 始终显示用户输入的food.name
+```
+
+Generated Recipe的英文路径保持原有naming与instructions；中文路径使用相同`sourceTemplateId`、实际slot和actual ingredients进入中文deterministic templates。模板只能引用当前MealPlan中的ingredients，不允许翻译层补入油、黄油、芝士或其他不存在食材。
+
+Saved Recipe的持久化snapshot保持原样。中文显示时以`sourceTemplateId`和ingredient的`foodId` / `referenceFoodId`安全重建display name与instructions；任一关键ingredient无法安全解析时整体回退保存时的name与instructions。该过程只生成view model，不修改snapshot。
+
+日期使用`Intl.DateTimeFormat(locale)`；数值使用`Intl.NumberFormat(locale)`。`kcal`、`g`、`ml`保留通用单位写法。HTML `lang`、document title与description随locale更新；入口HTML提供mobile viewport、theme color及Apple web app基础meta，但不注册Service Worker、不引入PWA plugin。
 
 ---
 
@@ -2202,8 +2254,9 @@ Phase 2.2不修改Meal Generator、candidate scoring、recipe templates、nutrit
 
 * Shopping List
 * 根据最新User Food `inStock`即时派生Missing Ingredients
-* Buy Again
-* Try Something New
+* Needed for Your Plan / 计划所需
+* Stock Up / 常备补货
+* Discover New Foods / 发现新食材
 * Mark as Bought
 * Reference-only item购买后创建独立User Food copy
 * localStorage V5与V4 → V5 migration
@@ -2212,7 +2265,25 @@ Phase 2.2不修改Meal Generator、candidate scoring、recipe templates、nutrit
 
 ---
 
-## Phase 4 — Natural Language（Deferred / Not included in current V1）
+## Phase 4 — Chinese Localization & Mobile Readiness
+
+已完成：
+
+* 集中的轻量`zh-CN` / `en`translation layer
+* Settings语言切换、即时更新与localStorage V6持久化
+* 83个Reference Food中文显示名，custom User Food名称原样保留
+* 14个Recipe Template中文名称与deterministic instruction templates
+* Generated Recipe按template与actual ingredients生成当前locale的名称和步骤
+* Saved Recipe snapshot不变，并在可安全解析时生成本地化display view
+* Today、Foods、Add/Edit Food、Recipes、Recipe Detail、Shop、Settings及所有状态和控件完整本地化
+* `Intl`日期与数字格式
+* 约390px移动端布局检查和iPhone Add to Home Screen基础meta
+
+本阶段不修改Nutrition Engine、Meal Generator核心、Shopping recommendation、库存模型或Saved Recipe持久化语义；不增加Service Worker、PWA框架或网络翻译服务。
+
+---
+
+## Future — Natural Language（Deferred / Not included in current V1）
 
 尚未实现：
 
@@ -2224,7 +2295,7 @@ Phase 2.2不修改Meal Generator、candidate scoring、recipe templates、nutrit
 * OCR / barcode
 * Backend / authentication / cloud
 
-Phase 4的未来产品范围保持不变，但当前V1不包含Natural Language Planning。本阶段不保留任何Parser、Constraint Chips、自然语言UI或相应持久化状态。
+Natural Language的未来产品范围保持不变，但当前V1不包含Natural Language Planning。当前代码不保留任何Parser、Constraint Chips、自然语言UI或相应持久化状态。
 
 当前V1通过Generate、Lock / Unlock、Regenerate、Portion Edit和Ingredient Swap完成可控的meal refinement。
 

@@ -5,7 +5,9 @@ import type {
   Food,
   GeneratedRecipe,
   MealPlan,
+  MealType,
   NewFoodSuggestion,
+  PlanNeededFood,
   RecipeIngredientSnapshot,
   RecipeTemplate,
   ReferenceFood,
@@ -104,6 +106,33 @@ export const getMealMissingIngredients = (
   }];
 });
 
+export const getPlanNeededFoods = (
+  plan: DailyPlan | null,
+  foods: Food[],
+): PlanNeededFood[] => {
+  if (!plan) return [];
+  const byFoodId = new Map<string, PlanNeededFood>();
+  const meals: Array<[MealType, MealPlan]> = [
+    ["breakfast", plan.breakfast],
+    ["lunch", plan.lunch],
+    ["snack", plan.snack],
+  ];
+
+  for (const [mealType, meal] of meals) {
+    for (const need of getMealMissingIngredients(meal, foods)) {
+      if (!need.foodId) continue;
+      const existing = byFoodId.get(need.foodId);
+      if (existing) {
+        if (!existing.mealTypes.includes(mealType)) existing.mealTypes.push(mealType);
+        continue;
+      }
+      byFoodId.set(need.foodId, { ...need, foodId: need.foodId, mealTypes: [mealType] });
+    }
+  }
+
+  return [...byFoodId.values()];
+};
+
 export const createShoppingItemsFromNeeds = (
   needs: ShoppingNeed[],
   source: ShoppingItemSource,
@@ -148,21 +177,8 @@ const recipeCoverageForFood = (
   template.mealTypes.some((mealType) => food.compatibleMeals.includes(mealType))
   && template.slots.some((slot) => foodMatchesSlot(food, slot)));
 
-const freePlanMissingFoodIds = (
-  freePlan: DailyPlan | null,
-  foods: Food[],
-): Set<string> => {
-  if (!freePlan) return new Set();
-  return new Set([
-    ...getMealMissingIngredients(freePlan.breakfast, foods),
-    ...getMealMissingIngredients(freePlan.lunch, foods),
-    ...getMealMissingIngredients(freePlan.snack, foods),
-  ].flatMap((need) => need.foodId ? [need.foodId] : []));
-};
-
 export const getBuyAgainSuggestions = (
   foods: Food[],
-  freePlan: DailyPlan | null,
   templates: RecipeTemplate[] = recipeTemplates,
 ): BuyAgainSuggestion[] => {
   const candidates = foods.filter((food) => !food.inStock);
@@ -171,27 +187,55 @@ export const getBuyAgainSuggestions = (
     recipeCoverageForFood(food, templates).length,
   ]));
   const maxCoverage = Math.max(1, ...coverages.values());
-  const planNeeds = freePlanMissingFoodIds(freePlan, foods);
 
   return candidates
     .map((food): BuyAgainSuggestion => {
       const coverage = coverages.get(food.id) ?? 0;
       const mealTypes = [...new Set(food.compatibleMeals)];
-      const score = (planNeeds.has(food.id) ? 35 : 0)
-        + (coverage / maxCoverage) * 30
-        + (food.regularBuy ? 15 : 0)
-        + (food.favourite ? 10 : 0)
-        + (mealTypes.length / 3) * 10;
+      const score = (coverage / maxCoverage) * 40
+        + (food.regularBuy ? 25 : 0)
+        + (mealTypes.length / 3) * 20
+        + (food.favourite ? 15 : 0);
       return {
         foodId: food.id,
         name: food.name,
         mealTypes,
         recipeCoverage: coverage,
-        neededByCurrentPlan: planNeeds.has(food.id),
         score,
       };
     })
     .sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+};
+
+export const excludePlanNeededSuggestions = (
+  suggestions: BuyAgainSuggestion[],
+  planNeeds: PlanNeededFood[],
+): BuyAgainSuggestion[] => {
+  const neededFoodIds = new Set(planNeeds.map((need) => need.foodId));
+  return suggestions.filter((suggestion) => !neededFoodIds.has(suggestion.foodId));
+};
+
+export interface SuggestionBatch<T> {
+  items: T[];
+  page: number;
+  pageCount: number;
+  hasAnotherSet: boolean;
+}
+
+export const getSuggestionBatch = <T>(
+  suggestions: T[],
+  requestedPage: number,
+  pageSize = 4,
+): SuggestionBatch<T> => {
+  const safePageSize = Math.max(1, Math.floor(pageSize));
+  const pageCount = Math.max(1, Math.ceil(suggestions.length / safePageSize));
+  const page = Math.max(0, Math.floor(requestedPage)) % pageCount;
+  return {
+    items: suggestions.slice(page * safePageSize, (page + 1) * safePageSize),
+    page,
+    pageCount,
+    hasAnotherSet: suggestions.length > safePageSize,
+  };
 };
 
 const tagSimilarity = (referenceFood: ReferenceFood, foods: Food[]): number => {

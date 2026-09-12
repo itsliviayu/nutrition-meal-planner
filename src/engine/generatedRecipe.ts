@@ -1,4 +1,7 @@
 import { recipeTemplates } from "../data/recipeTemplates";
+import { referenceFoods } from "../data/seedFoods";
+import { getFoodDisplayName, type Locale } from "../i18n/locale";
+import { recipeTemplateZh } from "../i18n/recipeLocalizations";
 import type {
   Food,
   GeneratedRecipe,
@@ -32,11 +35,23 @@ const readableFoodName = (name: string): string => name
   .replace(/\s+/g, " ")
   .trim();
 
-const instructionFoodName = (name: string): string =>
-  readableFoodName(name).toLocaleLowerCase("en-GB");
+const readableChineseFoodName = (food: Food): string => getFoodDisplayName(food, "zh-CN")
+  .replace("鸡胸肉", "鸡肉")
+  .replace("三文鱼柳", "三文鱼")
+  .replace("鳕鱼柳", "鳕鱼")
+  .replace("大虾仁", "虾仁");
 
-const joinNames = (names: string[]): string => {
+const displayFoodName = (food: Food, locale: Locale): string => locale === "zh-CN"
+  ? readableChineseFoodName(food)
+  : readableFoodName(food.name);
+
+const instructionFoodName = (food: Food, locale: Locale): string => locale === "zh-CN"
+  ? getFoodDisplayName(food, locale)
+  : readableFoodName(food.name).toLocaleLowerCase("en-GB");
+
+const joinNames = (names: string[], locale: Locale): string => {
   if (names.length <= 1) return names[0] ?? "";
+  if (locale === "zh-CN") return names.join("和");
   if (names.length === 2) return `${names[0]} and ${names[1]}`;
   return `${names.slice(0, -1).join(", ")} and ${names.at(-1)}`;
 };
@@ -101,37 +116,45 @@ const foodsBySlot = (
 export const buildGeneratedRecipeName = (
   template: RecipeTemplate,
   assignments: MealItemSlotAssignment[],
+  locale: Locale = "en",
 ): string => {
   const bySlot = foodsBySlot(assignments);
   const selectedNames: string[] = [];
+  const localization = locale === "zh-CN" ? recipeTemplateZh[template.id] : undefined;
+  const ingredientSlotIds = localization?.ingredientSlotIds ?? template.nameRule.ingredientSlotIds;
 
-  for (const slotId of template.nameRule.ingredientSlotIds) {
+  for (const slotId of ingredientSlotIds) {
     for (const food of bySlot.get(slotId) ?? []) {
-      const name = readableFoodName(food.name);
+      const name = displayFoodName(food, locale);
       if (name && !selectedNames.includes(name)) selectedNames.push(name);
       if (selectedNames.length >= template.nameRule.maxIngredients) break;
     }
     if (selectedNames.length >= template.nameRule.maxIngredients) break;
   }
 
-  if (selectedNames.length === 0) return template.name;
-  const ingredients = selectedNames.join(" & ");
-  return template.nameRule.suffix
-    ? `${ingredients} ${template.nameRule.suffix}`
+  if (selectedNames.length === 0) return localization?.name ?? template.name;
+  const ingredients = locale === "zh-CN" ? selectedNames.join("") : selectedNames.join(" & ");
+  const suffix = localization?.suffix ?? template.nameRule.suffix;
+  return suffix
+    ? locale === "zh-CN" ? `${ingredients}${suffix}` : `${ingredients} ${suffix}`
     : ingredients;
 };
 
 export const buildRecipeInstructions = (
   template: RecipeTemplate,
   assignments: MealItemSlotAssignment[],
+  locale: Locale = "en",
 ): string[] => {
   const bySlot = foodsBySlot(assignments);
-  return template.instructionSteps.flatMap((step) => {
+  const steps = locale === "zh-CN"
+    ? recipeTemplateZh[template.id]?.instructions ?? template.instructionSteps
+    : template.instructionSteps;
+  return steps.flatMap((step) => {
     if (step.whenSlotsPresent?.some((slotId) => !(bySlot.get(slotId)?.length))) return [];
     const placeholders = [...step.text.matchAll(/\{([^}]+)\}/g)].map((match) => match[1]);
     if (placeholders.some((slotId) => !(bySlot.get(slotId)?.length))) return [];
     const text = step.text.replace(/\{([^}]+)\}/g, (_match, slotId: string) =>
-      joinNames((bySlot.get(slotId) ?? []).map((food) => instructionFoodName(food.name))));
+      joinNames((bySlot.get(slotId) ?? []).map((food) => instructionFoodName(food, locale)), locale));
     return [text];
   });
 };
@@ -140,6 +163,7 @@ export const deriveGeneratedRecipe = (
   meal: MealPlan,
   foods: Food[],
   templates: RecipeTemplate[] = recipeTemplates,
+  locale: Locale = "en",
 ): GeneratedRecipe => {
   const template = findRecipeTemplate(meal.recipeTemplateId, templates);
   const assignments = template ? mapMealItemsToSlots(meal, foods, template) : [];
@@ -153,7 +177,7 @@ export const deriveGeneratedRecipe = (
     return [{
       foodId: food.id,
       referenceFoodId: food.referenceFoodId,
-      foodName: food.name,
+      foodName: getFoodDisplayName(food, locale),
       amount: item.amount,
       unit: item.unit,
       category: food.category,
@@ -164,17 +188,64 @@ export const deriveGeneratedRecipe = (
   });
 
   return {
-    name: template ? buildGeneratedRecipeName(template, assignments) : meal.name,
+    name: template ? buildGeneratedRecipeName(template, assignments, locale) : meal.name,
     sourceTemplateId: meal.recipeTemplateId,
     mealType: meal.type,
     ingredients,
     cookingTime: meal.cookingTime,
     equipment: [...meal.equipment],
     instructions: template
-      ? buildRecipeInstructions(template, assignments)
-      : ["Prepare the listed ingredients as needed.", "Combine and serve."],
+      ? buildRecipeInstructions(template, assignments, locale)
+      : locale === "zh-CN"
+        ? ["根据需要处理好列出的食材。", "组合装盘后即可食用。"]
+        : ["Prepare the listed ingredients as needed.", "Combine and serve."],
     nutrition: meal.nutrition,
     fibreDataComplete: isFibreDataComplete(resolveMealPortions(meal.items, foods)),
+  };
+};
+
+export interface SavedRecipeDisplay {
+  name: string;
+  instructions: string[];
+}
+
+export const deriveSavedRecipeDisplay = (
+  recipe: SavedRecipe,
+  foods: Food[],
+  locale: Locale,
+): SavedRecipeDisplay => {
+  if (locale === "en") return { name: recipe.name, instructions: recipe.instructions };
+  const template = findRecipeTemplate(recipe.sourceTemplateId);
+  if (!template) return { name: recipe.name, instructions: recipe.instructions };
+  const resolvedFoods = recipe.ingredients.map((ingredient) => foods.find((food) => food.id === ingredient.foodId)
+    ?? (ingredient.referenceFoodId
+      ? foods.find((food) => food.referenceFoodId === ingredient.referenceFoodId)
+        ?? referenceFoods.find((food) => food.id === ingredient.referenceFoodId)
+      : undefined));
+  if (resolvedFoods.some((food) => !food)) return { name: recipe.name, instructions: recipe.instructions };
+  const displayMeal: MealPlan = {
+    id: recipe.id,
+    type: recipe.mealType,
+    name: recipe.name,
+    items: recipe.ingredients.map((ingredient) => ({
+      foodId: ingredient.foodId,
+      amount: ingredient.amount,
+      unit: ingredient.unit,
+      locked: false,
+    })),
+    recipeTemplateId: recipe.sourceTemplateId,
+    nutrition: recipe.nutrition,
+    cookingTime: recipe.cookingTime,
+    equipment: recipe.equipment,
+  };
+  const displayFoods = resolvedFoods.map((food, index) => ({
+    ...food!,
+    id: recipe.ingredients[index].foodId,
+  }));
+  const assignments = mapMealItemsToSlots(displayMeal, displayFoods, template);
+  return {
+    name: buildGeneratedRecipeName(template, assignments, locale),
+    instructions: buildRecipeInstructions(template, assignments, locale),
   };
 };
 

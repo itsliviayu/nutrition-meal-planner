@@ -1,12 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { createUserFoodFromReference } from "../data/foodFactory";
 import { referenceFoods } from "../data/seedFoods";
-import type { DailyPlan, Food, GeneratedRecipe, MealPlan, SavedRecipe } from "../types";
+import type { DailyPlan, Food, GeneratedRecipe, MealPlan, RecipeTemplate, SavedRecipe } from "../types";
 import {
   createShoppingItemsFromNeeds,
+  excludePlanNeededSuggestions,
   getBuyAgainSuggestions,
   getGeneratedRecipeNeeds,
+  getPlanNeededFoods,
   getSavedRecipeNeeds,
+  getSuggestionBatch,
   getTrySomethingNewSuggestions,
   mergeShoppingItems,
 } from "./shoppingEngine";
@@ -116,18 +119,127 @@ describe("shoppingEngine missing ingredients", () => {
 });
 
 describe("shoppingEngine recommendations", () => {
-  it("Buy Again contains only out-of-stock My Foods and prioritises a current plan need", () => {
+  it("derives only out-of-stock User Foods used by the supplied plan", () => {
     const chicken = userFood("chicken-breast", true, { regularBuy: true });
     const broccoli = userFood("broccoli", false);
     const yogurt = userFood("greek-yogurt", false, { favourite: true });
-    const suggestions = getBuyAgainSuggestions(
-      [chicken, broccoli, yogurt],
-      freePlan(meal([chicken, broccoli])),
-    );
+    const needed = getPlanNeededFoods(freePlan(meal([chicken, broccoli])), [chicken, broccoli, yogurt]);
+
+    expect(needed).toEqual([
+      expect.objectContaining({ foodId: broccoli.id, mealTypes: ["lunch"] }),
+    ]);
+  });
+
+  it("returns no plan needs before a DailyPlan has been generated", () => {
+    expect(getPlanNeededFoods(null, [userFood("broccoli", false)])).toEqual([]);
+  });
+
+  it("returns no plan needs when every planned User Food is in stock", () => {
+    const broccoli = userFood("broccoli", true);
+    expect(getPlanNeededFoods(freePlan(meal([broccoli])), [broccoli])).toEqual([]);
+  });
+
+  it("deduplicates a missing food used in more than one meal and retains its meal types", () => {
+    const broccoli = userFood("broccoli", false);
+    const sharedMeal = meal([broccoli]);
+    const plan = {
+      ...freePlan(sharedMeal),
+      breakfast: { ...sharedMeal, id: "breakfast", type: "breakfast" as const },
+    };
+
+    expect(getPlanNeededFoods(plan, [broccoli])).toEqual([
+      expect.objectContaining({ foodId: broccoli.id, mealTypes: ["breakfast", "lunch"] }),
+    ]);
+  });
+
+  it("derives different needs from different mode-specific plan inputs", () => {
+    const broccoli = userFood("broccoli", false);
+    const yogurt = userFood("greek-yogurt", false);
+
+    expect(getPlanNeededFoods(freePlan(meal([broccoli])), [broccoli, yogurt])[0].foodId).toBe(broccoli.id);
+    expect(getPlanNeededFoods(freePlan(meal([yogurt])), [broccoli, yogurt])[0].foodId).toBe(yogurt.id);
+  });
+
+  it("Stock Up contains only out-of-stock My Foods and no current-plan field", () => {
+    const chicken = userFood("chicken-breast", true, { regularBuy: true });
+    const broccoli = userFood("broccoli", false);
+    const yogurt = userFood("greek-yogurt", false, { favourite: true });
+    const suggestions = getBuyAgainSuggestions([chicken, broccoli, yogurt]);
 
     expect(suggestions.map((suggestion) => suggestion.foodId)).not.toContain(chicken.id);
     expect(suggestions.map((suggestion) => suggestion.foodId)).toEqual(expect.arrayContaining([broccoli.id, yogurt.id]));
-    expect(suggestions[0]).toEqual(expect.objectContaining({ foodId: broccoli.id, neededByCurrentPlan: true }));
+    expect(suggestions.every((suggestion) => !("neededByCurrentPlan" in suggestion))).toBe(true);
+  });
+
+  it("excludes current plan needs from the Stock Up set shown on the same page", () => {
+    const broccoli = userFood("broccoli", false);
+    const yogurt = userFood("greek-yogurt", false);
+    const needed = getPlanNeededFoods(freePlan(meal([broccoli])), [broccoli, yogurt]);
+    const stockUp = excludePlanNeededSuggestions(getBuyAgainSuggestions([broccoli, yogurt]), needed);
+
+    expect(stockUp.map((suggestion) => suggestion.foodId)).toEqual([yogurt.id]);
+  });
+
+  it("gives Regular Buy its independent 25-point boost", () => {
+    const regular = userFood("broccoli", false, { id: "regular", name: "Regular", regularBuy: true });
+    const plain = userFood("broccoli", false, { id: "plain", name: "Plain" });
+    const suggestions = getBuyAgainSuggestions([plain, regular]);
+
+    expect(suggestions[0].foodId).toBe("regular");
+    expect(suggestions[0].score - suggestions[1].score).toBeCloseTo(25);
+  });
+
+  it("gives Favourite its independent 15-point boost", () => {
+    const favourite = userFood("broccoli", false, { id: "favourite", name: "Favourite", favourite: true });
+    const plain = userFood("broccoli", false, { id: "plain", name: "Plain" });
+    const suggestions = getBuyAgainSuggestions([plain, favourite]);
+
+    expect(suggestions[0].foodId).toBe("favourite");
+    expect(suggestions[0].score - suggestions[1].score).toBe(15);
+  });
+
+  it("uses Recipe Coverage and Meal Versatility in Stock Up ranking", () => {
+    const versatile = userFood("broccoli", false, { id: "versatile", name: "Versatile", compatibleMeals: ["breakfast", "lunch", "snack"], tags: ["quick"] });
+    const narrow = userFood("broccoli", false, { id: "narrow", name: "Narrow", compatibleMeals: ["lunch"], tags: [] });
+    const template = (id: string, allowedTags?: Food["tags"]): RecipeTemplate => ({
+      id,
+      name: id,
+      mealTypes: ["breakfast", "lunch", "snack"],
+      cookingTime: 5,
+      equipment: [],
+      slots: [{ id: "food", type: "vegetable", allowedTags, minItems: 1, maxItems: 1, optional: false }],
+      nameRule: { ingredientSlotIds: ["food"], suffix: "", maxIngredients: 1 },
+      instructionSteps: [{ text: "Prepare {food}." }],
+      tags: [],
+    });
+    const suggestions = getBuyAgainSuggestions([narrow, versatile], [template("general"), template("quick", ["quick"])]);
+
+    expect(suggestions[0]).toEqual(expect.objectContaining({ foodId: "versatile", recipeCoverage: 2, mealTypes: ["breakfast", "lunch", "snack"] }));
+    expect(suggestions[1]).toEqual(expect.objectContaining({ foodId: "narrow", recipeCoverage: 1, mealTypes: ["lunch"] }));
+    expect(suggestions[0].score).toBeCloseTo(60);
+    expect(suggestions[1].score).toBeCloseTo(20 + (20 / 3));
+  });
+
+  it("returns deterministic non-overlapping batches and wraps after the last set", () => {
+    const suggestions = Array.from({ length: 9 }, (_, index) => index);
+    const first = getSuggestionBatch(suggestions, 0, 4);
+    const second = getSuggestionBatch(suggestions, 1, 4);
+    const wrapped = getSuggestionBatch(suggestions, 3, 4);
+
+    expect(first.items).toEqual([0, 1, 2, 3]);
+    expect(second.items).toEqual([4, 5, 6, 7]);
+    expect(first.items.some((item) => second.items.includes(item))).toBe(false);
+    expect(wrapped.items).toEqual(first.items);
+    expect(first.hasAnotherSet).toBe(true);
+  });
+
+  it("does not offer another set when a candidate pool fits one batch", () => {
+    expect(getSuggestionBatch([1, 2, 3], 0, 4)).toEqual({
+      items: [1, 2, 3],
+      page: 0,
+      pageCount: 1,
+      hasAnotherSet: false,
+    });
   });
 
   it("Try Something New returns only Reference Foods not already represented in My Foods", () => {

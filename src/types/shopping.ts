@@ -28,12 +28,16 @@ export interface ShoppingNeed {
   status: ShoppingNeedStatus;
 }
 
+export interface PlanNeededFood extends ShoppingNeed {
+  foodId: string;
+  mealTypes: MealType[];
+}
+
 export interface BuyAgainSuggestion {
   foodId: string;
   name: string;
   mealTypes: MealType[];
   recipeCoverage: number;
-  neededByCurrentPlan: boolean;
   score: number;
 }
 
