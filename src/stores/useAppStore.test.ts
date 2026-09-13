@@ -1,6 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { defaultProfile } from "../data/defaultProfile";
+import { createUserFoodFromReference } from "../data/foodFactory";
 import { initialUserFoods } from "../data/initialFoods";
+import { referenceFoods } from "../data/referenceFoods";
+import { ONLY_CANDIDATE_MESSAGE } from "../engine/mealGenerator";
 import type { DailyPlan, MealPlan, MealType, SavedRecipe, ShoppingItem } from "../types";
 import type { PlanningMode } from "../utils/planningMode";
 import {
@@ -74,6 +77,10 @@ const resetStore = (dailyPlans: ModeDailyPlans = { free: null, inventory: null }
     shoppingItems: [],
     recentFoodIds: [],
     recentRecipeTemplateIds: [],
+    recentMealVariantKeys: {
+      free: { breakfast: [], lunch: [], snack: [] },
+      inventory: { breakfast: [], lunch: [], snack: [] },
+    },
     generationMessage: null,
   });
 };
@@ -154,6 +161,41 @@ describe("mode-specific DailyPlan state", () => {
     const state = useAppStore.getState();
     expect(state.dailyPlans[activeMode]).not.toBe(activePlanBefore);
     expect(state.dailyPlans[inactiveMode]).toBe(inactivePlan);
+    expect(state.recentMealVariantKeys[activeMode].breakfast).toHaveLength(1);
+    expect(state.recentMealVariantKeys[inactiveMode].breakfast).toEqual([]);
+  });
+
+  it("keeps the current meal and surfaces a message when no alternative variant exists", () => {
+    const banana = createUserFoodFromReference(
+      referenceFoods.find((food) => food.id === "banana")!,
+      { id: "user-banana", inStock: true },
+    );
+    const bananaSnack: MealPlan = {
+      id: "single-banana-snack",
+      type: "snack",
+      name: "Banana",
+      items: [{
+        foodId: banana.id,
+        amount: banana.defaultServing,
+        unit: banana.servingUnit,
+        locked: false,
+      }],
+      recipeTemplateId: "relaxed-snack",
+      techniqueId: "cold_assemble",
+      nutrition: banana.nutrition,
+      cookingTime: 3,
+      equipment: [],
+    };
+    const singleCandidatePlan = { ...plan("single"), snack: bananaSnack };
+    resetStore({ free: singleCandidatePlan, inventory: null });
+    useAppStore.setState({ foods: [banana] });
+
+    expect(useAppStore.getState().regenerateMeal("snack")).toBe(false);
+
+    const state = useAppStore.getState();
+    expect(state.dailyPlans.free).toBe(singleCandidatePlan);
+    expect(state.generationMessage).toBe(ONLY_CANDIDATE_MESSAGE);
+    expect(state.recentMealVariantKeys.free.snack).toEqual([]);
   });
 
   it("updates a portion only in the active plan", () => {

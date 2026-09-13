@@ -9,11 +9,13 @@ import { FOOD_CATEGORIES } from "../utils/foodOptions";
 interface FoodsPageProps {
   onAdd: () => void;
   onEdit: (id: string) => void;
+  bulkAddedCount?: number;
+  onDismissBulkFeedback: () => void;
 }
 
 type CategoryFilter = FoodCategory | "all";
 
-export function FoodsPage({ onAdd, onEdit }: FoodsPageProps) {
+export function FoodsPage({ onAdd, onEdit, bulkAddedCount, onDismissBulkFeedback }: FoodsPageProps) {
   const { categoryName, foodName, t } = useLocale();
   const foods = useAppStore((state) => state.foods);
   const toggleInStock = useAppStore((state) => state.toggleInStock);
@@ -42,9 +44,19 @@ export function FoodsPage({ onAdd, onEdit }: FoodsPageProps) {
   return (
     <>
       <section className="intro-copy">
-        <p>{t("foods.intro")}</p>
+        <div>
+          <p>{t("foods.intro")}</p>
+          <button type="button" className="text-button foods-build-link" onClick={onAdd}>{t("foods.buildLibrary")}</button>
+        </div>
         <span>{t("foods.count", { total: foods.length, stock: foods.filter((food) => food.inStock).length })}</span>
       </section>
+
+      {bulkAddedCount !== undefined && (
+        <div className="library-feedback" role="status" aria-live="polite">
+          <span>{t("foods.bulkAdded", { count: bulkAddedCount })}</span>
+          <button type="button" className="text-button" onClick={onDismissBulkFeedback}>{t("action.close")}</button>
+        </div>
+      )}
 
       <label className="search-field">
         <Icon name="search" />

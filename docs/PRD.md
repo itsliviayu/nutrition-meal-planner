@@ -532,9 +532,9 @@ referenceSourceId = CoFID Food Code or FDC ID
 referenceSourceUrl = official source URL
 ```
 
-当前Reference Food目录共83项：20 protein、14 carb、23 vegetable、12 fruit、11 fat/sauce和3 composite。82项来自CoFID；为了保持已有`skyr` reference ID有效，Plain Skyr使用USDA FoodData Central记录。CoFID的`Tr`值在数字模型中归一为0。
+当前Reference Food目录共161项：41 protein、29 carb、41 vegetable、22 fruit、22 fat/sauce和6 composite。160项来自CoFID；为了保持已有`skyr` reference ID有效，Plain Skyr使用USDA FoodData Central记录。CoFID的`Tr`值在数字模型中归一为0。
 
-Daily fibre target的30g/day严格按英国AOAC fibre口径理解。统一`fibre`字段只保存明确可比较的AOAC值，绝不把NSP值直接写入；找不到可靠AOAC值时保留`fibre = undefined`。当前75项有AOAC fibre，8项暂缺。Meal / Daily Nutrition计算只汇总AOAC可比值，`fibreSourceMethod = NSP`或未知值不参与30g target比较。
+Daily fibre target的30g/day严格按英国AOAC fibre口径理解。统一`fibre`字段只保存明确可比较的AOAC值，绝不把NSP值直接写入；找不到可靠AOAC值时保留`fibre = undefined`。当前134项有AOAC fibre，27项暂缺。Meal / Daily Nutrition计算只汇总AOAC可比值，`fibreSourceMethod = NSP`或未知值不参与30g target比较。
 
 ---
 
@@ -620,6 +620,14 @@ inStock = false
 
 批量添加不增加额外确认页面；原有单个`Search → Select → Confirm`流程和确认页状态设置保持不变。
 
+### Browse All Reference Foods
+
+Add Food同时提供轻量的`Browse all reference foods`入口，用于首次快速建立较完整的My Foods。Browse All展示完整161项本地目录，并提供All、Protein、Carbs、Vegetables、Fruit、Fat & Sauce和Composite Food分类筛选与对应数量。
+
+Browse All沿用即时搜索与批量选择；搜索不截断为12项。用户跨分类、搜索或清空搜索时，已选`referenceFoodId`继续保留，只有Cancel或成功加入后才清空。已经存在于My Foods的食品显示`Already added`并禁用。成功后返回My Foods并显示简短的加入数量反馈。
+
+Foods / My Foods页面提供轻量的“Browse and build your food library”入口。该入口仍进入同一个Add Food体验，不创建第三套Food Library或单独的持久化selection状态。
+
 ## 9.2 Packaged / Custom Food Manual Entry
 
 Common Food搜索结果下方提供次要入口：
@@ -701,7 +709,7 @@ nutritionSource = manual_estimate
 
 ## 9.4 Phase 1.2 Reference Food搜索范围
 
-Common Food搜索覆盖全部83个本地Reference Foods。搜索支持：
+Common Food搜索覆盖全部161个本地Reference Foods。搜索支持：
 
 * 大小写不敏感
 * 名称部分匹配
@@ -1106,6 +1114,10 @@ Nutrition Fit属于排序信号，不是把合理候选全部清零的Hard Const
 > 从 Top Candidates 中进行 weighted random selection
 
 这样每次点击才真的有“随机菜单”的感觉。
+
+初次生成继续在高分候选中进行weighted-random选择。单餐Regenerate则将`recipeTemplateId / blueprint + techniqueId + ingredient foodIds`视为一个完整meal variant：候选照常生成和评分，但只要存在其他合法候选，就必须排除当前variant；若有多个替代项，优先选择该餐次最近1–2次Regenerate未展示的variant，所有替代项用尽后才允许重新出现。该短期轮换历史按planning mode和meal type隔离。
+
+如果当前约束下只有一个合法variant，保留现有餐食并显示简短说明，不伪装成已经换餐。Locked ingredients、planning mode、stock、equipment与cooking time约束继续照常生效。
 
 ---
 
@@ -1947,7 +1959,7 @@ Excluded foods
 
 Reference Food与User Food的名称规则保持数据边界：
 
-* 83个Reference Foods使用系统维护的中英文名称映射；底层`id`、营养、来源和匹配字段不变
+* 161个Reference Foods使用系统维护的中英文名称映射；底层`id`、营养、来源和匹配字段不变
 * 从Reference Food创建的User Food可通过`referenceFoodId`显示当前语言的系统名称
 * 用户自行创建的Custom Food始终原样显示用户输入名称，不自动翻译
 * 找不到安全映射时回退到已有名称
@@ -1974,7 +1986,7 @@ V6
 
 V2增加`referenceFoodId`和`nutritionSource`，并支持将Phase 1已保存的Food数据自动迁移，不清空或覆盖用户已有食品。
 
-Phase 1.2新增的`aliases`和reference source字段为可选元数据，因此persist版本保持V2，不需要新的localStorage migration。Reference Food目录扩展只影响静态搜索源和全新安装的starter foods。
+Phase 1.2新增的`aliases`和reference source字段为可选元数据，因此当时persist版本保持V2。当前Reference Food Library扩展到161项并新增Browse All，也只影响只读静态目录和UI，不改变User Food schema、不补写已有用户库，因此当前persistence继续保持V6且不需要migration。
 
 Phase 2.1继续复用已持久化的`foods`和`inventoryOnly`。Multi Add仍向同一个User Food数组添加记录；Planning Mode只是`inventoryOnly`的UI映射，因此不改变persist版本，也不需要migration。
 
@@ -2042,7 +2054,7 @@ locale = valid persisted locale ?? "zh-CN"
 
 ## 当前阶段状态
 
-Phase 4 Chinese Localization & Mobile Readiness已完成。当前产品支持中文与英文即时切换、83个Reference Food中文显示、14个Meal Blueprints + 13个Cooking Techniques的deterministic recipe variants、Saved Recipe variant snapshot，以及约390px移动端与基础Add to Home Screen meta适配。Meal Generator在标准blueprint无候选时支持relaxed composition，Recipe Detail可在兼容做法之间切换；所有能力仍只使用本地结构化数据与localStorage，不引入新的服务端能力。
+Phase 4 Chinese Localization & Mobile Readiness已完成。当前产品支持中文与英文即时切换、161个Reference Food中文显示、14个Meal Blueprints + 13个Cooking Techniques的deterministic recipe variants、Saved Recipe variant snapshot，以及约390px移动端与基础Add to Home Screen meta适配。Reference Food Library现支持完整分类浏览、全量搜索和跨分类批量建立My Foods；Meal Generator的数据边界与规则不变。所有能力仍只使用本地结构化数据与localStorage，不引入新的服务端能力。
 
 Natural Language Planning明确为`Deferred / Not included in current V1`，不属于当前Localization阶段。尚未实现的能力包括：
 

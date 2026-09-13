@@ -7,7 +7,7 @@ import type {
   RecipeTemplate,
 } from "../types";
 import { weightedRandomSelect } from "./candidateScoring";
-import { buildCandidatePool, generateMeal } from "./mealGenerator";
+import { buildCandidatePool, createMealVariantKey, generateMeal } from "./mealGenerator";
 import { cookingTechniques } from "../data/cookingTechniques";
 import { createUserFoodFromReference } from "../data/foodFactory";
 import { referenceFoods } from "../data/referenceFoods";
@@ -115,6 +115,22 @@ describe("mealGenerator hard constraints", () => {
     }
   });
 
+  it("treats a newly bulk-added reference copy as a User Food in free mode but not inventory mode", () => {
+    const pittaReference = referenceFoods.find((item) => item.id === "white-pitta")!;
+    const bulkAddedPitta = createUserFoodFromReference(pittaReference, {
+      id: "bulk-white-pitta",
+      inStock: false,
+      regularBuy: false,
+      favourite: false,
+    });
+    const foods = [...lunchFoods(), bulkAddedPitta];
+
+    expect(buildCandidatePool(foods, constraints({ inventoryOnly: false })).map((item) => item.id))
+      .toContain("bulk-white-pitta");
+    expect(buildCandidatePool(foods, constraints({ inventoryOnly: true })).map((item) => item.id))
+      .not.toContain("bulk-white-pitta");
+  });
+
   it("never includes excluded foods", () => {
     const result = generateMeal({ foods: lunchFoods(), constraints: constraints({ excludedFoodIds: ["protein-a"] }), target, templates: [template()], random: () => 0 });
     expect(result.ok).toBe(true);
@@ -181,6 +197,118 @@ describe("weighted random selection", () => {
     const highRoll = weightedRandomSelect(candidates, () => 0.99)?.template.id;
     expect([lowRoll, highRoll].every((id) => id === "candidate-0" || id === "candidate-1")).toBe(true);
     expect(new Set([lowRoll, highRoll]).size).toBe(2);
+  });
+});
+
+describe("meal regeneration variants", () => {
+  const variantFoods = () => [
+    food("egg", "protein"),
+    food("wholemeal-toast", "carb"),
+    food("spinach", "vegetable"),
+  ];
+  const variantTemplate = template({ id: "eggs-toast-plate" });
+  const variantConstraints = constraints({
+    allowedEquipment: ["hob"],
+    maxCookingTime: 12,
+  });
+  const ingredientIds = variantFoods().map((item) => item.id);
+  const keyFor = (techniqueId: string) => createMealVariantKey(
+    variantTemplate.id,
+    techniqueId,
+    ingredientIds,
+  );
+
+  const regenerateFrom = (currentVariantKey: string, recentVariantKeys: string[] = []) => generateMeal({
+    foods: variantFoods(),
+    constraints: variantConstraints,
+    target,
+    templates: [variantTemplate],
+    regeneration: { currentVariantKey, recentVariantKeys },
+    random: () => 0,
+  });
+
+  it("does not return the current variant when another valid candidate exists", () => {
+    const currentVariantKey = keyFor("scramble");
+    const result = regenerateFrom(currentVariantKey);
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.didChange).toBe(true);
+      expect(result.variantKey).not.toBe(currentVariantKey);
+    }
+  });
+
+  it("rotates through three available variants before allowing a recent one again", () => {
+    const first = keyFor("scramble");
+    const secondResult = regenerateFrom(first);
+    expect(secondResult.ok).toBe(true);
+    if (!secondResult.ok) return;
+
+    const second = secondResult.variantKey;
+    const thirdResult = regenerateFrom(second, [first]);
+    expect(thirdResult.ok).toBe(true);
+    if (!thirdResult.ok) return;
+
+    const third = thirdResult.variantKey;
+    expect(new Set([first, second, third]).size).toBe(3);
+
+    const exhaustedResult = regenerateFrom(third, [first, second]);
+    expect(exhaustedResult.ok).toBe(true);
+    if (exhaustedResult.ok) {
+      expect(exhaustedResult.variantKey).not.toBe(third);
+      expect([first, second]).toContain(exhaustedResult.variantKey);
+    }
+  });
+
+  it("keeps the current meal safely when it is the only legal candidate", () => {
+    const banana = referenceUserFood("banana");
+    const currentVariantKey = createMealVariantKey(
+      "relaxed-snack",
+      "cold_assemble",
+      [banana.id],
+    );
+    const result = generateMeal({
+      foods: [banana],
+      constraints: constraints({ mealType: "snack" }),
+      target,
+      templates: [],
+      regeneration: { currentVariantKey },
+      random: () => 0,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.didChange).toBe(false);
+      expect(result.variantKey).toBe(currentVariantKey);
+    }
+  });
+
+  it("continues to preserve locked ingredients and their portions", () => {
+    const currentVariantKey = keyFor("scramble");
+    const result = generateMeal({
+      foods: variantFoods(),
+      constraints: constraints({
+        allowedEquipment: ["hob"],
+        maxCookingTime: 12,
+        lockedFoodIds: ["egg"],
+      }),
+      target,
+      templates: [variantTemplate],
+      lockedItems: [{ foodId: "egg", amount: 145, unit: "g", locked: true }],
+      regeneration: { currentVariantKey },
+      random: () => 0,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.didChange).toBe(true);
+      expect(result.meal.items).toContainEqual({
+        foodId: "egg",
+        amount: 145,
+        unit: "g",
+        locked: true,
+      });
+    }
   });
 });
 

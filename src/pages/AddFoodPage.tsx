@@ -4,17 +4,23 @@ import {
   createUserFoodsFromReferences,
   findReferenceDuplicate,
 } from "../data/foodFactory";
-import { searchReferenceFoods } from "../data/referenceFoodSearch";
+import {
+  browseReferenceFoods,
+  getReferenceFoodCategoryCounts,
+  searchReferenceFoods,
+  type ReferenceFoodCategoryFilter,
+} from "../data/referenceFoodSearch";
 import { referenceFoods } from "../data/seedFoods";
 import { useLocale } from "../i18n/useLocale";
 import { useAppStore } from "../stores/useAppStore";
 import type { Food, ReferenceFood } from "../types";
+import { FOOD_CATEGORIES } from "../utils/foodOptions";
 
 interface AddFoodPageProps {
   onSelectReference: (referenceFoodId: string) => void;
   onAddCustom: () => void;
   onViewExisting: (foodId: string) => void;
-  onMultiAddComplete: () => void;
+  onMultiAddComplete: (count: number) => void;
 }
 
 const basisLabel = {
@@ -30,9 +36,15 @@ export function AddFoodPage({ onSelectReference, onAddCustom, onViewExisting, on
   const [search, setSearch] = useState("");
   const [duplicate, setDuplicate] = useState<{ reference: ReferenceFood; existing: Food }>();
   const [multiSelect, setMultiSelect] = useState(false);
+  const [browseAll, setBrowseAll] = useState(false);
+  const [category, setCategory] = useState<ReferenceFoodCategoryFilter>("all");
   const [selectedReferenceIds, setSelectedReferenceIds] = useState<string[]>([]);
 
-  const visibleReferences = useMemo(() => searchReferenceFoods(search, locale), [locale, search]);
+  const visibleReferences = useMemo(
+    () => browseAll ? browseReferenceFoods(search, category, locale) : searchReferenceFoods(search, locale),
+    [browseAll, category, locale, search],
+  );
+  const categoryCounts = useMemo(getReferenceFoodCategoryCounts, []);
   const existingReferenceIds = useMemo(() => new Set(
     referenceFoods
       .filter((reference) => findReferenceDuplicate(foods, reference))
@@ -48,9 +60,24 @@ export function AddFoodPage({ onSelectReference, onAddCustom, onViewExisting, on
     onSelectReference(reference.id);
   };
 
-  const toggleMultiSelect = () => {
-    setMultiSelect((current) => !current);
+  const startMultiSelect = () => {
+    setMultiSelect(true);
+    setDuplicate(undefined);
+  };
+
+  const cancelMultiSelect = () => {
+    setMultiSelect(false);
+    setBrowseAll(false);
+    setCategory("all");
     setSelectedReferenceIds([]);
+    setDuplicate(undefined);
+  };
+
+  const openBrowseAll = () => {
+    setBrowseAll(true);
+    setMultiSelect(true);
+    setSearch("");
+    setCategory("all");
     setDuplicate(undefined);
   };
 
@@ -69,7 +96,8 @@ export function AddFoodPage({ onSelectReference, onAddCustom, onViewExisting, on
     const additions = createUserFoodsFromReferences(selectedReferences, foods);
     if (additions.length === 0) return;
     addFoods(additions);
-    onMultiAddComplete();
+    setSelectedReferenceIds([]);
+    onMultiAddComplete(additions.length);
   };
 
   return (
@@ -97,12 +125,29 @@ export function AddFoodPage({ onSelectReference, onAddCustom, onViewExisting, on
 
       <section className="common-food-section">
         <div className="list-heading">
-          <h2>{t("addFood.commonFoods")}</h2>
+          <h2>{t(browseAll ? "addFood.browseTitle" : "addFood.commonFoods")}</h2>
           <div className="list-heading__actions">
-            <span>{search ? t("addFood.matches", { count: visibleReferences.length }) : t("addFood.popularPicks")}</span>
-            <button type="button" className="text-button" onClick={toggleMultiSelect}>{multiSelect ? t("action.cancel") : t("addFood.selectMultiple")}</button>
+            <span>{browseAll || search ? t("addFood.matches", { count: visibleReferences.length }) : t("addFood.popularPicks")}</span>
+            {multiSelect
+              ? <button type="button" className="text-button" onClick={cancelMultiSelect}>{t("action.cancel")}</button>
+              : <button type="button" className="text-button" onClick={startMultiSelect}>{t("addFood.selectMultiple")}</button>}
           </div>
         </div>
+        {browseAll && (
+          <>
+            <p className="reference-browser__intro">{t("addFood.browseBody")}</p>
+            <div className="filter-scroll reference-browser__filters" aria-label={t("addFood.categoryFilters")}>
+              <button type="button" className={category === "all" ? "filter-chip is-active" : "filter-chip"} onClick={() => setCategory("all")}>
+                {t("foods.all")} <span>{categoryCounts.all}</span>
+              </button>
+              {FOOD_CATEGORIES.map((option) => (
+                <button type="button" key={option.value} className={category === option.value ? "filter-chip is-active" : "filter-chip"} onClick={() => setCategory(option.value)}>
+                  {categoryName(option.value)} <span>{categoryCounts[option.value]}</span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
         <div className="reference-list">
           {visibleReferences.map((food) => {
             const alreadyAdded = existingReferenceIds.has(food.id);
@@ -148,6 +193,17 @@ export function AddFoodPage({ onSelectReference, onAddCustom, onViewExisting, on
             {t("addFood.addSelected", { count: selectedReferenceIds.length })}
           </button>
         </div>
+      )}
+
+      {!browseAll && (
+        <section className="reference-browser-entry">
+          <div>
+            <span className="section-kicker">{t("addFood.buildKicker")}</span>
+            <h2>{t("addFood.buildTitle")}</h2>
+            <p>{t("addFood.buildBody")}</p>
+          </div>
+          <button type="button" className="secondary-button" onClick={openBrowseAll}>{t("addFood.browseAll")} <span aria-hidden="true">›</span></button>
+        </section>
       )}
 
       <section className="custom-food-callout">

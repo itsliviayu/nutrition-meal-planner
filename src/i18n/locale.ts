@@ -76,6 +76,7 @@ const generationMessageKeys: Record<string, TranslationKey> = {
   "No meal combination matches the current time, equipment and food settings.": "generation.noMatch",
   "There aren’t enough suitable in-stock foods for this meal. Add a few foods or switch to Plan Freely.": "generation.insufficientInventory",
   "There aren’t enough suitable foods for this meal. Add a few foods to My Foods.": "generation.insufficientFoods",
+  "This is the only suitable meal for the current settings.": "generation.onlyCandidate",
 };
 
 export const localizeGenerationMessage = (message: string, locale: Locale): string => {

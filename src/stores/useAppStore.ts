@@ -6,7 +6,11 @@ import { migratePersistedFood } from "../data/foodMigration";
 import { initialUserFoods } from "../data/initialFoods";
 import { referenceFoods } from "../data/seedFoods";
 import { generateDailyPlan as buildDailyPlan } from "../engine/dailyGenerator";
-import { generateMeal } from "../engine/mealGenerator";
+import {
+  createMealVariantKey,
+  generateMeal,
+  ONLY_CANDIDATE_MESSAGE,
+} from "../engine/mealGenerator";
 import { recalculateDailyPlan, updateMealItemPortion as updatePlanPortion } from "../engine/planNutrition";
 import { targetForMealRegeneration } from "../engine/dailyGenerator";
 import { createSavedRecipeSnapshot, deriveGeneratedRecipe, findRecipeTemplate, getMealCompatibleTechniques, recipeSnapshotKey } from "../engine/generatedRecipe";
@@ -37,6 +41,9 @@ export interface ModeDailyPlans {
   inventory: DailyPlan | null;
 }
 
+type MealVariantHistory = Record<MealType, string[]>;
+type ModeMealVariantHistory = Record<PlanningMode, MealVariantHistory>;
+
 export interface AppState {
   locale: Locale;
   profile: UserProfile;
@@ -47,6 +54,7 @@ export interface AppState {
   shoppingItems: ShoppingItem[];
   recentFoodIds: string[];
   recentRecipeTemplateIds: string[];
+  recentMealVariantKeys: ModeMealVariantHistory;
   generationMessage: string | null;
   setLocale: (locale: Locale) => void;
   addFood: (food: Food) => void;
@@ -96,6 +104,29 @@ type PersistedAppInput = Partial<PersistedAppData> & Partial<LegacyPersistedAppD
 export const APP_STORAGE_VERSION = 6;
 
 const emptyDailyPlans = (): ModeDailyPlans => ({ free: null, inventory: null });
+
+const emptyMealVariantHistory = (): MealVariantHistory => ({
+  breakfast: [],
+  lunch: [],
+  snack: [],
+});
+
+const emptyModeMealVariantHistory = (): ModeMealVariantHistory => ({
+  free: emptyMealVariantHistory(),
+  inventory: emptyMealVariantHistory(),
+});
+
+const clearMealVariantHistory = (
+  histories: ModeMealVariantHistory,
+  mode: PlanningMode,
+  mealType: MealType,
+): ModeMealVariantHistory => ({
+  ...histories,
+  [mode]: {
+    ...histories[mode],
+    [mealType]: [],
+  },
+});
 
 const isPlanningMode = (value: unknown): value is PlanningMode =>
   value === "free" || value === "inventory";
@@ -166,6 +197,14 @@ const recentFromPlan = (plan: DailyPlan) => ({
 const appendRecent = (current: string[], next: string[], limit: number): string[] =>
   [...current, ...next].slice(-limit);
 
+const advanceVariantCycle = (
+  currentCycle: string[],
+  departedVariantKey: string,
+  selectedVariantKey: string,
+): string[] => currentCycle.includes(selectedVariantKey)
+  ? [departedVariantKey]
+  : [...new Set([...currentCycle, departedVariantKey])];
+
 const recalculatePlans = (
   dailyPlans: ModeDailyPlans,
   foods: Food[],
@@ -194,6 +233,7 @@ export const useAppStore = create<AppState>()(
       shoppingItems: [],
       recentFoodIds: [],
       recentRecipeTemplateIds: [],
+      recentMealVariantKeys: emptyModeMealVariantHistory(),
       generationMessage: null,
       setLocale: (locale) => set({ locale }),
       addFood: (food) => set((state) => ({ foods: [...state.foods, food] })),
@@ -248,6 +288,10 @@ export const useAppStore = create<AppState>()(
         set({
           dailyPlans: { ...state.dailyPlans, [mode]: result.plan },
           generationMessage: null,
+          recentMealVariantKeys: {
+            ...state.recentMealVariantKeys,
+            [mode]: emptyMealVariantHistory(),
+          },
           recentFoodIds: appendRecent(state.recentFoodIds, recent.recentFoodIds, 24),
           recentRecipeTemplateIds: appendRecent(state.recentRecipeTemplateIds, recent.recentRecipeTemplateIds, 12),
         });
@@ -259,6 +303,14 @@ export const useAppStore = create<AppState>()(
         const activePlan = selectActiveDailyPlan(state);
         if (!activePlan) return false;
         const currentMeal = activePlan[mealType];
+        const currentTechniqueId = currentMeal.techniqueId
+          ?? deriveGeneratedRecipe(currentMeal, state.foods).techniqueId;
+        const currentVariantKey = createMealVariantKey(
+          currentMeal.recipeTemplateId,
+          currentTechniqueId,
+          currentMeal.items.map((item) => item.foodId),
+        );
+        const recentVariantKeys = state.recentMealVariantKeys[mode][mealType];
         const lockedItems = currentMeal.items.filter((item) => item.locked);
         const result = generateMeal({
           foods: state.foods,
@@ -275,9 +327,17 @@ export const useAppStore = create<AppState>()(
           lockedItems,
           recentFoodIds: state.recentFoodIds,
           recentRecipeTemplateIds: state.recentRecipeTemplateIds,
+          regeneration: {
+            currentVariantKey,
+            recentVariantKeys,
+          },
         });
         if (!result.ok) {
           set({ generationMessage: result.message });
+          return false;
+        }
+        if (!result.didChange) {
+          set({ generationMessage: ONLY_CANDIDATE_MESSAGE });
           return false;
         }
         const dailyPlan = recalculateDailyPlan({
@@ -287,6 +347,17 @@ export const useAppStore = create<AppState>()(
         set({
           dailyPlans: { ...state.dailyPlans, [mode]: dailyPlan },
           generationMessage: null,
+          recentMealVariantKeys: {
+            ...state.recentMealVariantKeys,
+            [mode]: {
+              ...state.recentMealVariantKeys[mode],
+              [mealType]: advanceVariantCycle(
+                recentVariantKeys,
+                currentVariantKey,
+                result.variantKey,
+              ),
+            },
+          },
           recentFoodIds: appendRecent(state.recentFoodIds, result.meal.items.map((item) => item.foodId), 24),
           recentRecipeTemplateIds: appendRecent(state.recentRecipeTemplateIds, [result.meal.recipeTemplateId], 12),
         });
@@ -391,6 +462,11 @@ export const useAppStore = create<AppState>()(
               [mealType]: { ...namedMeal, name: generatedRecipe.name },
             },
           },
+          recentMealVariantKeys: clearMealVariantHistory(
+            state.recentMealVariantKeys,
+            mode,
+            mealType,
+          ),
         });
         return true;
       },
@@ -420,6 +496,11 @@ export const useAppStore = create<AppState>()(
               [mealType]: { ...nextMeal, name: generatedRecipe.name },
             },
           },
+          recentMealVariantKeys: clearMealVariantHistory(
+            state.recentMealVariantKeys,
+            state.activePlanningMode,
+            mealType,
+          ),
         });
         return true;
       },

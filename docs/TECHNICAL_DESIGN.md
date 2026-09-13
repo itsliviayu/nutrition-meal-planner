@@ -242,16 +242,16 @@ Reference Food是系统内置、只读的基础食品参考数据：
 referenceFoods
 ```
 
-它作为Common Food搜索源，包含结构化营养、默认份量、aliases、来源元数据、tags和compatibleMeals，但不直接作为用户库存中的可编辑对象。Phase 1.2包含83条Reference Foods，分类数量为20 / 14 / 23 / 12 / 11 / 3（protein / carb / vegetable / fruit / fat_sauce / composite）。
+它作为Common Food搜索源，包含结构化营养、默认份量、aliases、来源元数据、tags和compatibleMeals，但不直接作为用户库存中的可编辑对象。当前包含161条Reference Foods，分类数量为41 / 29 / 41 / 22 / 22 / 6（protein / carb / vegetable / fruit / fat_sauce / composite）。
 
-82条Phase 1.2营养数据来自UK CoFID 2021；Plain Skyr使用USDA FoodData Central记录以保持已有`skyr` reference ID有效。`referenceSourceId`保存CoFID Food Code或FDC ID，`referenceSourceUrl`指向对应官方页面。所有数据在构建时静态打包；应用运行时不访问营养数据库或API。
+160条营养数据来自UK CoFID 2021；Plain Skyr使用USDA FoodData Central记录以保持已有`skyr` reference ID有效。`referenceSourceId`保存CoFID Food Code或FDC ID，`referenceSourceUrl`指向对应官方页面。所有数据在构建时静态打包；应用运行时不访问营养数据库或API。
 
 Reference fibre规则：
 
 * 统一`nutrition.fibre`只保存明确的AOAC值
 * 不把NSP值映射或换算到`nutrition.fibre`
 * 缺少可靠AOAC值时保留`nutrition.fibre = undefined`
-* 当前83项中75项有AOAC fibre，8项暂缺，没有任何Reference Food把NSP写入统一字段
+* 当前161项中134项有AOAC fibre，27项暂缺，没有任何Reference Food把NSP写入统一字段
 * `fibreSourceMethod = "NSP"`只表示不可与30g/day目标直接比较的数据；当前静态Reference Foods不保存这类值
 
 ### User Food
@@ -1238,6 +1238,16 @@ recentRecipeTemplateIds
 
 这样才能真的有随机搭配价值。
 
+单餐Regenerate另使用不持久化的短期variant history：
+
+```ts
+type MealVariantKey = string; // blueprint/template + technique + sorted ingredient foodIds
+
+recentMealVariantKeys: Record<PlanningMode, Record<MealType, MealVariantKey[]>>;
+```
+
+每个mode、每个meal type记录当前轮换周期内已经离开的variant。选择时优先排除该集合，因此最近1–2次展示会自然受到保护，而且在所有当前可用替代项出现前不会提前复用旧variant；替代项耗尽并开始复用时重置下一轮周期。该状态只用于当前会话，不加入localStorage，Persistence继续保持V6。
+
 ---
 
 # 30. Lock & Regenerate流程
@@ -1263,6 +1273,17 @@ Generator接收到：
 ```ts
 lockedFoodIds = ["chicken"];
 ```
+
+Regenerate仍先执行现有候选生成、hard constraints与scoring，然后按以下顺序选择：
+
+```text
+1. 排除与当前variant完全相同的候选
+2. 优先保留最近1–2次未展示的替代variant
+3. 替代variant耗尽后，允许复用较早variant
+4. 若没有任何替代variant，保留当前meal并返回可显示的说明状态
+```
+
+初次`Generate My Day`不传入regeneration context，因此原有weighted-random选择保持不变。切换planning mode不会生成或覆盖plan；单餐历史与`dailyPlans.free` / `dailyPlans.inventory`相互隔离。Locked ingredients、inventory filtering、equipment、cooking time与nutrition计算链路均不改变。
 
 新的结果：
 
@@ -1809,6 +1830,8 @@ Add packaged or custom food
 * 空搜索固定展示8个热门食品：Egg、Greek Yogurt、Chicken Breast、Mushrooms、Broccoli、Banana、Rice和Pasta
 * 有搜索词时按名称前缀、alias前缀、名称包含和alias包含排序，最多展示12项
 
+Quick Add下方提供`Browse all reference foods`入口。Browse模式调用同一个纯数据搜索模块的全量结果路径，不应用12项上限，并支持`all | protein | carb | vegetable | fruit | fat_sauce | composite`分类过滤和静态分类计数。UI selection只保存选中的`referenceFoodId[]`，与当前visible results解耦，因此搜索和分类变化不会清空已选项；Cancel或成功提交负责清空。
+
 选择Reference Food后进入单页极简确认：
 
 ```text
@@ -1860,6 +1883,8 @@ favourite = false
 批量提交前再次以`referenceFoodId`或规范化name检查当前User Food Library，跳过已存在或同一批次重复的Reference Food。UI中的已存在项显示`Already added`并禁用；Multi Add不提供`Add anyway`。
 
 该流程直接写入同一个Zustand `foods`数组，不创建新的reference selection store、inventory collection或第三套Food Library。单个添加仍使用原有Search → Select → Confirm流程。
+
+批量成功后通过App级短生命周期UI state把实际加入数量返回My Foods，用`aria-live`状态信息反馈。该反馈和Browse selection都不写入Zustand persistence；User Food数据仍由现有`addFoods` action持久化。Foods页面的build-library入口只导航到现有Add Food页面。
 
 ## Packaged / Custom Food
 
@@ -2094,7 +2119,7 @@ Recipe variant refinement增加可选的`MealPlan.techniqueId`与`SavedRecipe.te
 ```text
 src/i18n/
   translations.ts          # zh-CN / en translation keys
-  foodNames.ts             # 83个Reference Food中文显示名
+  foodNames.ts             # 161个Reference Food中文显示名
   recipeLocalizations.ts   # 旧Blueprint/Saved Recipe的本地化回退文案
   locale.ts                # t、Intl格式与显示名helper
   useLocale.ts             # React / Zustand adapter
@@ -2218,10 +2243,11 @@ Phase 1.1只优化数据来源和Add Food UX，不改变Phase 2–4范围。
 
 已完成：
 
-* 83项本地静态Reference Foods，覆盖六类食品
+* 161项本地静态Reference Foods，覆盖六类食品
 * UK CoFID 2021 / USDA FDC来源名称、记录ID和官方URL元数据
 * 英国语境显示名称及aliases搜索
-* 固定8项Popular Picks和最多12项搜索结果
+* 固定8项Popular Picks和Quick Search最多12项搜索结果
+* Browse All全量搜索、分类计数/筛选和跨筛选批量选择
 * 15个仅用于全新安装的starter User Food copies
 * V2持久化兼容，既有User Food Library不被覆盖
 
@@ -2315,7 +2341,7 @@ Phase 2.2不修改Meal Generator、candidate scoring、recipe templates、nutrit
 
 * 集中的轻量`zh-CN` / `en`translation layer
 * Settings语言切换、即时更新与localStorage V6持久化
-* 83个Reference Food中文显示名，custom User Food名称原样保留
+* 161个Reference Food中文显示名，custom User Food名称原样保留
 * 14个Meal Blueprint与13个Cooking Technique的中文/英文确定性文案
 * Generated Recipe按blueprint、selected technique与actual ingredients生成当前locale的名称和步骤
 * Saved Recipe snapshot不变，并在可安全解析时生成本地化display view
@@ -2710,11 +2736,15 @@ Do not start Phase 2.
 
 □ 旧Phase 1 localStorage数据可以迁移到V2
 
-□ Reference Food总量为83项，且每项包含权威来源元数据
+□ Reference Food总量为161项，且每项包含权威来源元数据
 
 □ mush / cour / zucchini / shrimp / eggplant均能命中预期Reference Food
 
 □ 空搜索只展示8个Popular Picks
+
+□ Browse All可显示全目录、按六类筛选，并在切换搜索/分类后保留已选项
+
+□ 批量加入跳过Already added，默认inStock / regularBuy / favourite均为false
 
 □ 全新安装初始化15个独立的reference-linked User Foods
 ```

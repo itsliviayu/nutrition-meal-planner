@@ -22,9 +22,16 @@ import { getCompatibleTechniques, selectDefaultTechnique } from "./cookingTechni
 
 export type MealGenerationFailureReason = "insufficient_foods" | "no_valid_combination";
 
+export const ONLY_CANDIDATE_MESSAGE = "This is the only suitable meal for the current settings.";
+
 export type MealGenerationResult =
-  | { ok: true; meal: MealPlan; candidateCount: number }
+  | { ok: true; meal: MealPlan; candidateCount: number; didChange: boolean; variantKey: string }
   | { ok: false; reason: MealGenerationFailureReason; message: string };
+
+export interface MealRegenerationContext {
+  currentVariantKey: string;
+  recentVariantKeys?: string[];
+}
 
 export interface GenerateMealInput {
   foods: Food[];
@@ -34,12 +41,29 @@ export interface GenerateMealInput {
   lockedItems?: MealItem[];
   recentFoodIds?: string[];
   recentRecipeTemplateIds?: string[];
+  regeneration?: MealRegenerationContext;
   candidateCount?: number;
   random?: () => number;
 }
 
 const isDirectReferenceFood = (food: Food): boolean =>
   food.nutritionSource === "reference" && !food.referenceFoodId;
+
+export const createMealVariantKey = (
+  recipeTemplateId: string,
+  techniqueId: string | undefined,
+  foodIds: string[],
+): string => [
+  recipeTemplateId,
+  techniqueId ?? "legacy",
+  [...foodIds].sort().join(","),
+].join("|");
+
+export const candidateVariantKey = (candidate: MealCandidate): string => createMealVariantKey(
+  candidate.template.id,
+  candidate.technique.id,
+  candidate.items.map((item) => item.foodId),
+);
 
 const matchesAllowedId = (food: Food, allowedFoodIds: string[]): boolean =>
   allowedFoodIds.includes(food.id)
@@ -197,7 +221,7 @@ export const generateCandidates = (
     const template = templates[(startIndex + attempt) % templates.length];
     const variants = buildCandidate(template, pool, requiredFoods, lockedItems, constraints, random);
     for (const candidate of variants) {
-      const key = `${template.id}:${candidate.technique.id}:${candidate.items.map((item) => item.foodId).sort().join(",")}`;
+      const key = candidateVariantKey(candidate);
       candidates.set(key, candidate);
     }
   }
@@ -300,6 +324,7 @@ export const generateMeal = ({
   lockedItems = [],
   recentFoodIds = [],
   recentRecipeTemplateIds = [],
+  regeneration,
   candidateCount = 36,
   random = Math.random,
 }: GenerateMealInput): MealGenerationResult => {
@@ -358,10 +383,25 @@ export const generateMeal = ({
     recentFoodIds,
     recentRecipeTemplateIds,
   });
-  const selected = weightedRandomSelect(scored, random)!;
+  const alternatives = regeneration
+    ? scored.filter((candidate) => candidateVariantKey(candidate) !== regeneration.currentVariantKey)
+    : scored;
+  const seenVariants = new Set(regeneration?.recentVariantKeys ?? []);
+  const unseenAlternatives = alternatives.filter((candidate) => !seenVariants.has(candidateVariantKey(candidate)));
+  const selectionPool = regeneration && unseenAlternatives.length > 0
+    ? unseenAlternatives
+    : alternatives;
+  const didChange = !regeneration || selectionPool.length > 0;
+  const selected = weightedRandomSelect(
+    selectionPool.length > 0 ? selectionPool : scored,
+    random,
+  )!;
+  const variantKey = candidateVariantKey(selected);
   return {
     ok: true,
     candidateCount: scored.length,
+    didChange,
+    variantKey,
     meal: {
       id: `meal-${createId()}`,
       type: constraints.mealType,

@@ -2,6 +2,7 @@ import { useRef, type PointerEvent as ReactPointerEvent } from "react";
 import { MealCard } from "../components/MealCard";
 import { NutritionSummary } from "../components/NutritionSummary";
 import { getMealMissingIngredients } from "../engine/shoppingEngine";
+import { ONLY_CANDIDATE_MESSAGE } from "../engine/mealGenerator";
 import { formatTodayDate, localizeGenerationMessage } from "../i18n/locale";
 import { useLocale } from "../i18n/useLocale";
 import { selectActiveDailyPlan, useAppStore } from "../stores/useAppStore";
@@ -124,7 +125,12 @@ export function TodayPage({ onOpenFoods, onOpenRecipe }: TodayPageProps) {
 
       {generationMessage && (
         <section className="generation-notice" role="status">
-          <div><strong>{t("today.generationErrorTitle")}</strong><p>{localizeGenerationMessage(generationMessage, locale)}</p></div>
+          <div>
+            <strong>{t(generationMessage === ONLY_CANDIDATE_MESSAGE
+              ? "today.noAlternativeTitle"
+              : "today.generationErrorTitle")}</strong>
+            <p>{localizeGenerationMessage(generationMessage, locale)}</p>
+          </div>
           <div>
             <button type="button" className="text-button" onClick={clearGenerationMessage}>{t("today.dismiss")}</button>
             <button type="button" className="secondary-button" onClick={onOpenFoods}>{t("today.openFoods")}</button>

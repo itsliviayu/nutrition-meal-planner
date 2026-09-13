@@ -58,6 +58,8 @@ describe("multi-add reference food copies", () => {
 
     expect(additions).toHaveLength(2);
     expect(additions.every((food) => food.inStock === false)).toBe(true);
+    expect(additions.every((food) => food.regularBuy === false)).toBe(true);
+    expect(additions.every((food) => food.favourite === false)).toBe(true);
     expect(additions.map((food) => food.referenceFoodId)).toEqual(["salmon", "courgette"]);
     expect(additions[0].referenceSourceId).toBe(salmon.referenceSourceId);
 

@@ -1,4 +1,4 @@
-import type { ReferenceFood } from "../types";
+import type { FoodCategory, ReferenceFood } from "../types";
 import { getReferenceDisplayName, type Locale } from "../i18n/locale";
 import { commonReferenceFoods } from "./referenceFoods";
 
@@ -22,9 +22,14 @@ const popularReferenceFoods = POPULAR_REFERENCE_FOOD_IDS.map((id) => {
   return food;
 });
 
-export const searchReferenceFoods = (query: string, locale: Locale = "en"): ReferenceFood[] => {
+export type ReferenceFoodCategoryFilter = FoodCategory | "all";
+
+const rankedReferenceFoods = (query: string, locale: Locale): ReferenceFood[] => {
   const normalizedQuery = normalizeSearchText(query);
-  if (!normalizedQuery) return popularReferenceFoods;
+  if (!normalizedQuery) {
+    return [...commonReferenceFoods].sort((a, b) =>
+      getReferenceDisplayName(a, locale).localeCompare(getReferenceDisplayName(b, locale), locale));
+  }
 
   return commonReferenceFoods
     .map((food) => {
@@ -45,6 +50,34 @@ export const searchReferenceFoods = (query: string, locale: Locale = "en"): Refe
     .filter(({ rank }) => rank >= 0)
     .sort((a, b) => a.rank - b.rank
       || getReferenceDisplayName(a.food, locale).localeCompare(getReferenceDisplayName(b.food, locale), locale))
-    .slice(0, 12)
     .map(({ food }) => food);
+};
+
+export const searchReferenceFoods = (query: string, locale: Locale = "en"): ReferenceFood[] => {
+  const normalizedQuery = normalizeSearchText(query);
+  if (!normalizedQuery) return popularReferenceFoods;
+  return rankedReferenceFoods(query, locale).slice(0, 12);
+};
+
+export const browseReferenceFoods = (
+  query: string,
+  category: ReferenceFoodCategoryFilter = "all",
+  locale: Locale = "en",
+): ReferenceFood[] => rankedReferenceFoods(query, locale)
+  .filter((food) => category === "all" || food.category === category);
+
+export const getReferenceFoodCategoryCounts = (): Record<ReferenceFoodCategoryFilter, number> => {
+  const counts: Record<ReferenceFoodCategoryFilter, number> = {
+    all: commonReferenceFoods.length,
+    protein: 0,
+    carb: 0,
+    vegetable: 0,
+    fruit: 0,
+    fat_sauce: 0,
+    composite: 0,
+  };
+  commonReferenceFoods.forEach((food) => {
+    counts[food.category] += 1;
+  });
+  return counts;
 };

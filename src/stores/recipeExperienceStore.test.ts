@@ -99,6 +99,10 @@ const resetStore = (freePlan: DailyPlan, inventoryPlan: DailyPlan) => {
     savedRecipes: [],
     recentFoodIds: [],
     recentRecipeTemplateIds: [],
+    recentMealVariantKeys: {
+      free: { breakfast: [], lunch: [], snack: [] },
+      inventory: { breakfast: [], lunch: [], snack: [] },
+    },
     generationMessage: null,
   });
 };

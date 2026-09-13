@@ -26,9 +26,9 @@ describe("localization display layer", () => {
     expect(translate("zh-CN", "meal.regenerate")).toBe("换一份");
   });
 
-  it("covers all 83 Reference Foods with Chinese display names", () => {
-    expect(referenceFoods).toHaveLength(83);
-    expect(Object.keys(referenceFoodNamesZh)).toHaveLength(83);
+  it("covers all 161 Reference Foods with Chinese display names", () => {
+    expect(referenceFoods).toHaveLength(161);
+    expect(Object.keys(referenceFoodNamesZh)).toHaveLength(161);
     for (const food of referenceFoods) {
       expect(referenceFoodNamesZh[food.id as keyof typeof referenceFoodNamesZh]).toBeTruthy();
       expect(getReferenceDisplayName(food, "zh-CN")).not.toBe(food.name);

@@ -52,6 +52,10 @@ const resetStore = (foods: Food[] = [broccoli()], shoppingItems: ShoppingItem[] 
     savedRecipes: [],
     recentFoodIds: [],
     recentRecipeTemplateIds: [],
+    recentMealVariantKeys: {
+      free: { breakfast: [], lunch: [], snack: [] },
+      inventory: { breakfast: [], lunch: [], snack: [] },
+    },
     generationMessage: null,
   });
 };

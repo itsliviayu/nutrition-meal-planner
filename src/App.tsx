@@ -20,6 +20,7 @@ export default function App() {
   const [selectedReferenceFoodId, setSelectedReferenceFoodId] = useState<string>();
   const [selectedMealType, setSelectedMealType] = useState<MealType>();
   const [selectedSavedRecipeId, setSelectedSavedRecipeId] = useState<string>();
+  const [bulkAddedCount, setBulkAddedCount] = useState<number>();
 
   const titles: Record<AppRoute, string> = {
     today: t("nav.today"),
@@ -65,14 +66,14 @@ export default function App() {
   if (route === "today") {
     content = <TodayPage onOpenFoods={() => navigate("foods")} onOpenRecipe={(mealType) => { setSelectedMealType(mealType); navigate("recipe-detail"); }} />;
   } else if (route === "foods") {
-    content = <FoodsPage onAdd={() => navigate("add-food")} onEdit={(id) => { setEditingFoodId(id); setRoute("edit-food"); window.scrollTo({ top: 0, behavior: "smooth" }); }} />;
+    content = <FoodsPage bulkAddedCount={bulkAddedCount} onDismissBulkFeedback={() => setBulkAddedCount(undefined)} onAdd={() => navigate("add-food")} onEdit={(id) => { setEditingFoodId(id); setRoute("edit-food"); window.scrollTo({ top: 0, behavior: "smooth" }); }} />;
   } else if (route === "add-food") {
     content = (
       <AddFoodPage
         onSelectReference={(id) => { setSelectedReferenceFoodId(id); setRoute("confirm-food"); window.scrollTo({ top: 0, behavior: "smooth" }); }}
         onAddCustom={() => navigate("custom-food")}
         onViewExisting={(id) => { setEditingFoodId(id); setRoute("edit-food"); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-        onMultiAddComplete={() => navigate("foods")}
+        onMultiAddComplete={(count) => { setBulkAddedCount(count); navigate("foods"); }}
       />
     );
   } else if (route === "confirm-food") {
