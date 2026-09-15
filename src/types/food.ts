@@ -32,6 +32,35 @@ export type NutritionSource =
 
 export type FibreSourceMethod = "AOAC" | "NSP";
 
+export type IngredientKind =
+  | "egg"
+  | "cooked_meat"
+  | "raw_meat"
+  | "fish_seafood"
+  | "tofu_legume"
+  | "yogurt_dairy"
+  | "cheese"
+  | "milk"
+  | "other_protein"
+  | "bread"
+  | "pasta"
+  | "rice"
+  | "noodles"
+  | "wrap"
+  | "oats"
+  | "potato"
+  | "grain"
+  | "cereal"
+  | "other_carb"
+  | "vegetable"
+  | "fruit"
+  | "sauce"
+  | "spread"
+  | "oil_fat"
+  | "nuts_seeds"
+  | "composite"
+  | "other";
+
 export interface Food {
   id: string;
   referenceFoodId?: string;
@@ -41,6 +70,8 @@ export interface Food {
   referenceSourceUrl?: string;
   name: string;
   category: FoodCategory;
+  /** Culinary identity. Optional so persisted V6 foods remain backward compatible. */
+  ingredientKind?: IngredientKind;
   brand?: string;
   store?: string;
   nutritionBasis: NutritionBasis;
@@ -65,6 +96,7 @@ export type ReferenceFood = Food & {
   referenceSourceId: string;
   referenceSourceUrl: string;
   nutritionSource: "reference";
+  ingredientKind: IngredientKind;
 };
 
 export interface FoodPortion {

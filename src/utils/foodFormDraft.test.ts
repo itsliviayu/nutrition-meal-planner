@@ -1,12 +1,17 @@
 import { describe, expect, it } from "vitest";
 import type { Food } from "../types";
 import {
+  changeDraftNutritionSource,
   createFoodFormDraft,
   foodFromFormDraft,
+  isNutritionEditable,
   isValidOptionalNumber,
   isValidRequiredNumber,
   parseNumericDraft,
+  restoreDraftReferenceNutrition,
 } from "./foodFormDraft";
+import { createUserFoodFromReference } from "../data/foodFactory";
+import { referenceFoods } from "../data/referenceFoods";
 
 const existingFood: Food = {
   id: "food-1",
@@ -32,6 +37,7 @@ describe("Food form numeric drafts", () => {
     const draft = createFoodFormDraft();
     expect(draft.nutrition).toMatchObject({ calories: "", protein: "", carbs: "", fat: "", fibre: "" });
     expect(draft.defaultServing).toBe("");
+    expect(draft.ingredientKind).toBe("other_protein");
   });
 
   it("keeps an emptied zero as an empty string", () => {
@@ -73,5 +79,79 @@ describe("Food form numeric drafts", () => {
     expect(draft.gramsPerUnit).toBe("42.5");
     draft.nutrition.calories = "";
     expect(isValidRequiredNumber(draft.nutrition.calories)).toBe(false);
+  });
+});
+
+describe("Reference-linked Food form drafts", () => {
+  const milkReference = referenceFoods.find((food) => food.id === "semi-skimmed-milk")!;
+  const linkedFood = createUserFoodFromReference(milkReference, {
+    id: "user-milk",
+    name: "Tesco 半脱脂牛奶",
+    defaultServing: 250,
+    store: "Tesco",
+    inStock: true,
+    regularBuy: true,
+    favourite: true,
+  });
+
+  it("keeps reference nutrition locked while identity and serving fields remain ordinary draft values", () => {
+    const draft = createFoodFormDraft(linkedFood);
+    draft.name = "早餐牛奶";
+    draft.defaultServing = "300";
+
+    expect(isNutritionEditable(draft)).toBe(false);
+    expect(draft).toMatchObject({
+      name: "早餐牛奶",
+      defaultServing: "300",
+      referenceFoodId: "semi-skimmed-milk",
+      nutritionSource: "reference",
+      ingredientKind: "milk",
+    });
+  });
+
+  it.each(["package_label", "manual_estimate"] as const)("switches to %s without losing reference ancestry", (source) => {
+    const draft = changeDraftNutritionSource(createFoodFormDraft(linkedFood), source);
+    draft.nutrition.calories = "50";
+
+    expect(isNutritionEditable(draft)).toBe(true);
+    expect(draft.referenceFoodId).toBe("semi-skimmed-milk");
+    expect(draft.nutritionSource).toBe(source);
+    expect(draft.nutrition.calories).toBe("50");
+  });
+
+  it("restores official nutrition and provenance without overwriting User Food identity or preferences", () => {
+    const customized = changeDraftNutritionSource(createFoodFormDraft(linkedFood), "package_label");
+    customized.nutrition.calories = "999";
+    customized.nutritionBasis = "per_unit";
+    customized.name = "早餐牛奶";
+    customized.brand = "Tesco";
+    customized.defaultServing = "300";
+    customized.tags = ["breakfast", "quick"];
+    customized.compatibleMeals = ["breakfast"];
+    customized.ingredientKind = "yogurt_dairy";
+
+    const restored = restoreDraftReferenceNutrition(customized, milkReference);
+
+    expect(restored.nutritionSource).toBe("reference");
+    expect(foodFromFormDraft(restored).nutrition).toEqual(milkReference.nutrition);
+    expect(restored.nutritionBasis).toBe(milkReference.nutritionBasis);
+    expect(restored.fibreSourceMethod).toBe(milkReference.fibreSourceMethod);
+    expect(restored).toMatchObject({
+      name: "早餐牛奶",
+      brand: "Tesco",
+      defaultServing: "300",
+      tags: ["breakfast", "quick"],
+      compatibleMeals: ["breakfast"],
+      referenceFoodId: "semi-skimmed-milk",
+      referenceSourceId: milkReference.referenceSourceId,
+      ingredientKind: "yogurt_dairy",
+    });
+  });
+
+  it("leaves a pure Custom Food workflow editable and unlinked", () => {
+    const draft = createFoodFormDraft();
+    expect(isNutritionEditable(draft)).toBe(true);
+    expect(draft.nutritionSource).toBe("package_label");
+    expect(draft.referenceFoodId).toBeUndefined();
   });
 });

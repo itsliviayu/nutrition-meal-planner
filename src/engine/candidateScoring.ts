@@ -4,6 +4,7 @@ import type {
   MealCandidate,
   MealNutritionTarget,
 } from "../types";
+import { culinaryCompatibilityScore } from "./foodSemantics";
 
 const clamp01 = (value: number): number => Math.max(0, Math.min(1, value));
 
@@ -77,7 +78,12 @@ export const scoreCandidate = (
   const maximumItems = candidate.template.slots.reduce((sum, slot) => sum + slot.maxItems, 0);
   const optionalCapacity = Math.max(1, maximumItems - requiredItems);
   const usefulOptionalFill = clamp01((candidate.items.length - requiredItems) / optionalCapacity);
-  const recipeCompatibility = 0.9 + usefulOptionalFill * 0.1;
+  const structuralFill = 0.9 + usefulOptionalFill * 0.1;
+  const candidateFoods = candidate.items.flatMap((item) => {
+    const food = foodsById.get(item.foodId);
+    return food ? [food] : [];
+  });
+  const culinaryFit = culinaryCompatibilityScore(candidate.technique.id, candidateFoods);
   const inStockCount = candidate.items.filter((item) => foodsById.get(item.foodId)?.inStock).length;
   const inventoryUsage = inStockCount / Math.max(1, candidate.items.length);
   const recentFoods = new Set(context.recentFoodIds.slice(-12));
@@ -92,7 +98,8 @@ export const scoreCandidate = (
 
   return Math.round((
     nutritionFit(candidate, context.target) * 40
-    + recipeCompatibility * 25
+    + structuralFill * 5
+    + culinaryFit * 20
     + inventoryUsage * 15
     + preferenceFit(candidate, context.constraints, foodsById, context.target) * 10
     + variety * 5

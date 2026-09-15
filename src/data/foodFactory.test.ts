@@ -34,6 +34,21 @@ describe("reference food copies", () => {
     expect(userFood.referenceSourceId).toBe(mushrooms.referenceSourceId);
   });
 
+  it("allows an explicit customized name without changing the canonical Reference Food", () => {
+    const referenceName = mushrooms.name;
+    const customized = createUserFoodFromReference(mushrooms, {
+      id: "customized-mushrooms",
+      name: "My breakfast mushrooms",
+    });
+
+    expect(customized).toMatchObject({
+      name: "My breakfast mushrooms",
+      referenceFoodId: "mushroom",
+      nutritionSource: "reference",
+    });
+    expect(mushrooms.name).toBe(referenceName);
+  });
+
   it("finds duplicates by reference id or normalized name", () => {
     const byReference = createUserFoodFromReference(mushrooms, { id: "one" });
     const byName = { ...byReference, id: "two", referenceFoodId: undefined, name: "  MUSHROOMS " };

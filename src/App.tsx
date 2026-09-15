@@ -21,6 +21,7 @@ export default function App() {
   const [selectedMealType, setSelectedMealType] = useState<MealType>();
   const [selectedSavedRecipeId, setSelectedSavedRecipeId] = useState<string>();
   const [bulkAddedCount, setBulkAddedCount] = useState<number>();
+  const [customizingReferenceFoodId, setCustomizingReferenceFoodId] = useState<string>();
 
   const titles: Record<AppRoute, string> = {
     today: t("nav.today"),
@@ -30,7 +31,7 @@ export default function App() {
     settings: t("route.settings"),
     "add-food": t("route.addFood"),
     "confirm-food": t("route.addFood"),
-    "custom-food": t("route.customFood"),
+    "custom-food": t(customizingReferenceFoodId ? "route.customizeFood" : "route.customFood"),
     "edit-food": t("route.editFood"),
     "recipe-detail": t("route.recipe"),
     "saved-recipe-detail": t("route.savedRecipe"),
@@ -40,7 +41,7 @@ export default function App() {
     settings: t("eyebrow.preferences"),
     "add-food": t("route.foodLibrary"),
     "confirm-food": t("eyebrow.quickAdd"),
-    "custom-food": t("eyebrow.packageOrEstimate"),
+    "custom-food": t(customizingReferenceFoodId ? "eyebrow.referenceCopy" : "eyebrow.packageOrEstimate"),
     "edit-food": t("route.foodLibrary"),
     "recipe-detail": t("eyebrow.today"),
     "saved-recipe-detail": t("eyebrow.myRecipes"),
@@ -58,6 +59,7 @@ export default function App() {
     }
     if (nextRoute !== "edit-food") setEditingFoodId(undefined);
     if (nextRoute !== "confirm-food") setSelectedReferenceFoodId(undefined);
+    if (nextRoute !== "custom-food") setCustomizingReferenceFoodId(undefined);
     setRoute(nextRoute);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
@@ -71,15 +73,16 @@ export default function App() {
     content = (
       <AddFoodPage
         onSelectReference={(id) => { setSelectedReferenceFoodId(id); setRoute("confirm-food"); window.scrollTo({ top: 0, behavior: "smooth" }); }}
-        onAddCustom={() => navigate("custom-food")}
+        onAddCustom={() => { setCustomizingReferenceFoodId(undefined); navigate("custom-food"); }}
         onViewExisting={(id) => { setEditingFoodId(id); setRoute("edit-food"); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+        onCustomizeReference={(id) => { setCustomizingReferenceFoodId(id); navigate("custom-food"); }}
         onMultiAddComplete={(count) => { setBulkAddedCount(count); navigate("foods"); }}
       />
     );
   } else if (route === "confirm-food") {
-    content = <ConfirmCommonFoodPage referenceFoodId={selectedReferenceFoodId} onDone={() => navigate("foods")} onBack={() => navigate("add-food")} />;
+    content = <ConfirmCommonFoodPage referenceFoodId={selectedReferenceFoodId} onDone={() => navigate("foods")} onBack={() => navigate("add-food")} onCustomize={(id) => { setCustomizingReferenceFoodId(id); navigate("custom-food"); }} />;
   } else if (route === "custom-food" || route === "edit-food") {
-    content = <FoodFormPage foodId={route === "edit-food" ? editingFoodId : undefined} onDone={() => navigate("foods")} onCancel={route === "custom-food" ? () => navigate("add-food") : undefined} />;
+    content = <FoodFormPage foodId={route === "edit-food" ? editingFoodId : undefined} referenceFoodId={route === "custom-food" ? customizingReferenceFoodId : undefined} onDone={() => navigate("foods")} onCancel={route === "custom-food" ? () => navigate("add-food") : undefined} />;
   } else if (route === "settings") {
     content = <SettingsPage onDone={() => navigate(settingsReturnRoute)} />;
   } else if (route === "recipe-detail") {

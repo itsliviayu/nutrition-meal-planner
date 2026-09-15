@@ -43,6 +43,18 @@ describe("localization display layer", () => {
     expect(getFoodDisplayName(userFood, "en")).toBe("Chicken Breast");
   });
 
+  it("shows a customized User Food name instead of its localized canonical reference name", () => {
+    const reference = referenceFoods.find((food) => food.id === "semi-skimmed-milk")!;
+    const userFood = createUserFoodFromReference(reference, {
+      id: "user-milk",
+      name: "Tesco 半脱脂牛奶",
+    });
+
+    expect(getReferenceDisplayName(reference, "zh-CN")).toBe("半脱脂牛奶");
+    expect(getFoodDisplayName(userFood, "zh-CN")).toBe("Tesco 半脱脂牛奶");
+    expect(getFoodDisplayName(userFood, "en")).toBe("Tesco 半脱脂牛奶");
+  });
+
   it("preserves the exact name of a user-created custom Food", () => {
     const reference = referenceFoods.find((food) => food.id === "chicken-breast")!;
     const userFood = createUserFoodFromReference(reference, { id: "user-chicken" });

@@ -12,6 +12,7 @@ import {
   getSuggestionBatch,
   getTrySomethingNewSuggestions,
   mergeShoppingItems,
+  shoppingIdentityKey,
 } from "./shoppingEngine";
 
 const nutrition = { calories: 300, protein: 25, carbs: 30, fat: 8, fibre: 5 };
@@ -114,6 +115,35 @@ describe("shoppingEngine missing ingredients", () => {
 
     expect(mergeShoppingItems(fromRecipe, fromSaved)).toEqual([
       expect.objectContaining({ sources: ["recipe", "saved_recipe"] }),
+    ]);
+  });
+
+  it("keeps explicitly different User Food variants separate even when they share a referenceFoodId", () => {
+    const first = { foodId: "milk-one", referenceFoodId: "semi-skimmed-milk", displayName: "Breakfast milk" };
+    const second = { foodId: "milk-two", referenceFoodId: "semi-skimmed-milk", displayName: "Coffee milk" };
+
+    expect(shoppingIdentityKey(first)).not.toBe(shoppingIdentityKey(second));
+  });
+
+  it("does not guess a Saved Recipe fallback when multiple User Foods share its referenceFoodId", () => {
+    const first = userFood("semi-skimmed-milk", false, { id: "milk-one", name: "Breakfast milk" });
+    const second = userFood("semi-skimmed-milk", false, { id: "milk-two", name: "Coffee milk" });
+    const saved: SavedRecipe = {
+      id: "saved-milk",
+      name: "Saved breakfast",
+      sourceTemplateId: "quick-breakfast-plate",
+      mealType: "breakfast",
+      ingredients: [{ foodId: "deleted-milk", referenceFoodId: "semi-skimmed-milk", foodName: "Milk", amount: 200, unit: "g" }],
+      cookingTime: 5,
+      equipment: [],
+      instructions: ["Serve."],
+      nutrition,
+      fibreDataComplete: true,
+      createdAt: "2026-09-10T12:00:00.000Z",
+    };
+
+    expect(getSavedRecipeNeeds(saved, [first, second])).toEqual([
+      expect.objectContaining({ foodId: "deleted-milk", status: "stock_status_unavailable" }),
     ]);
   });
 });

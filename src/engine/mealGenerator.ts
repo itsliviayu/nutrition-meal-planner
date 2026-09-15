@@ -19,6 +19,7 @@ import {
 } from "./planNutrition";
 import { calculateMealNutrition } from "./nutritionCalculator";
 import { getCompatibleTechniques, selectDefaultTechnique } from "./cookingTechnique";
+import { effectiveIngredientKind, foodHasRole, isMeaningfulSemanticComposition } from "./foodSemantics";
 
 export type MealGenerationFailureReason = "insufficient_foods" | "no_valid_combination";
 
@@ -71,6 +72,7 @@ const matchesAllowedId = (food: Food, allowedFoodIds: string[]): boolean =>
 
 export const foodMatchesSlot = (food: Food, slot: RecipeSlot): boolean => {
   if (slot.type !== "specific" && food.category !== slot.type) return false;
+  if (slot.allowedIngredientKinds && !slot.allowedIngredientKinds.includes(effectiveIngredientKind(food))) return false;
   if (slot.allowedFoodIds && !matchesAllowedId(food, slot.allowedFoodIds)) return false;
   if (slot.allowedTags && !slot.allowedTags.every((tag) => food.tags.includes(tag))) return false;
   return true;
@@ -228,23 +230,6 @@ export const generateCandidates = (
   return [...candidates.values()];
 };
 
-const relaxedCompositionIsMeaningful = (foods: Food[], mealType: GeneratorConstraints["mealType"]): boolean => {
-  const categories = new Set(foods.map((food) => food.category));
-  if (mealType === "lunch") {
-    return foods.length >= 2 && (
-      (categories.has("protein") && categories.has("carb"))
-      || (categories.has("protein") && categories.has("vegetable"))
-      || (foods.length >= 3 && categories.has("carb") && categories.has("vegetable"))
-    );
-  }
-  if (mealType === "breakfast") {
-    if (foods.length === 1) return categories.has("protein") || categories.has("carb") || categories.has("fruit") || categories.has("composite");
-    return categories.has("protein") || categories.has("carb") || categories.has("fruit");
-  }
-  if (foods.length === 1) return categories.has("fruit") || categories.has("protein") || categories.has("composite");
-  return categories.has("fruit") && categories.has("protein");
-};
-
 const combinations = <T>(values: T[], count: number, limit = 120): T[][] => {
   const result: T[][] = [];
   const visit = (start: number, selected: T[]) => {
@@ -281,7 +266,7 @@ export const generateRelaxedCandidates = (
   for (let size = Math.max(minimumItems, requiredFoods.length); size <= maximumItems; size += 1) {
     for (const extras of combinations(choices, size - requiredFoods.length)) {
       const selectedFoods = [...requiredFoods, ...extras];
-      if (!relaxedCompositionIsMeaningful(selectedFoods, constraints.mealType)) continue;
+      if (!isMeaningfulSemanticComposition(selectedFoods, constraints.mealType)) continue;
       const techniques = getCompatibleTechniques({
         blueprint,
         mealType: constraints.mealType,
@@ -312,7 +297,7 @@ const mealName = (candidate: MealCandidate, foods: Food[]): string => {
   if (!dynamicTemplates.has(candidate.template.id)) return candidate.template.name;
   const lead = candidate.items
     .map((item) => foods.find((food) => food.id === item.foodId))
-    .find((food) => food?.category === "protein");
+    .find((food) => food && foodHasRole(food, "main_protein"));
   return lead ? `${lead.name} ${candidate.template.name}` : candidate.template.name;
 };
 

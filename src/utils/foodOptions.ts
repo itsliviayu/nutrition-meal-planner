@@ -1,4 +1,5 @@
-import type { Equipment, FoodCategory, FoodTag, MealType } from "../types";
+import { INGREDIENT_KINDS_BY_CATEGORY } from "../data/ingredientKinds";
+import type { Equipment, FoodCategory, FoodTag, IngredientKind, MealType } from "../types";
 
 export const FOOD_CATEGORIES: Array<{ value: FoodCategory; label: string }> = [
   { value: "protein", label: "Protein" },
@@ -35,6 +36,10 @@ export const EQUIPMENT: Array<{ value: Equipment; label: string }> = [
   { value: "microwave", label: "Microwave" },
   { value: "fridge", label: "Fridge" },
 ];
+
+export const ingredientKindOptionsForCategory = (
+  category: FoodCategory,
+): IngredientKind[] => INGREDIENT_KINDS_BY_CATEGORY[category];
 
 export const categoryLabel = (category: FoodCategory): string =>
   FOOD_CATEGORIES.find((option) => option.value === category)?.label ?? category;

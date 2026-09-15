@@ -1,4 +1,5 @@
-import type { Food, Nutrition } from "../types";
+import type { Food, Nutrition, NutritionSource, ReferenceFood } from "../types";
+import { defaultIngredientKindForCategory } from "../data/ingredientKinds";
 
 export type NumericDraft = string;
 
@@ -39,6 +40,7 @@ export const createFoodFormDraft = (food?: Food): FoodFormDraft => food ? {
   id: "",
   name: "",
   category: "protein",
+  ingredientKind: defaultIngredientKindForCategory("protein"),
   nutritionBasis: "per_100g",
   nutrition: { calories: "", protein: "", carbs: "", fat: "", fibre: "", sugar: "", saturatedFat: "", salt: "" },
   defaultServing: "",
@@ -102,3 +104,42 @@ export const foodPreviewFromDraft = (draft: FoodFormDraft): Food => ({
   defaultServing: parseNumericDraft(draft.defaultServing) ?? 0,
   gramsPerUnit: parseNumericDraft(draft.gramsPerUnit),
 });
+
+export const isNutritionEditable = (draft: Pick<FoodFormDraft, "nutritionSource">): boolean =>
+  draft.nutritionSource !== "reference";
+
+export const changeDraftNutritionSource = (
+  draft: FoodFormDraft,
+  nutritionSource: NutritionSource,
+): FoodFormDraft => ({
+  ...draft,
+  nutritionSource,
+  estimatedNutrition: nutritionSource !== "package_label",
+  fibreSourceMethod: nutritionSource === "manual_estimate" || draft.nutrition.fibre.trim() === ""
+    ? undefined
+    : nutritionSource === "package_label"
+      ? "AOAC"
+      : draft.fibreSourceMethod,
+});
+
+export const restoreDraftReferenceNutrition = (
+  draft: FoodFormDraft,
+  referenceFood: ReferenceFood,
+): FoodFormDraft => {
+  const referenceDraft = createFoodFormDraft(referenceFood);
+  return {
+    ...draft,
+    referenceFoodId: referenceFood.id,
+    aliases: [...referenceFood.aliases],
+    referenceSourceName: referenceFood.referenceSourceName,
+    referenceSourceId: referenceFood.referenceSourceId,
+    referenceSourceUrl: referenceFood.referenceSourceUrl,
+    nutritionSource: "reference",
+    estimatedNutrition: true,
+    nutritionBasis: referenceDraft.nutritionBasis,
+    nutrition: { ...referenceDraft.nutrition },
+    fibreSourceMethod: referenceFood.fibreSourceMethod,
+    servingUnit: referenceDraft.servingUnit,
+    gramsPerUnit: referenceDraft.gramsPerUnit,
+  };
+};

@@ -11,11 +11,23 @@ import { buildCandidatePool, createMealVariantKey, generateMeal } from "./mealGe
 import { cookingTechniques } from "../data/cookingTechniques";
 import { createUserFoodFromReference } from "../data/foodFactory";
 import { referenceFoods } from "../data/referenceFoods";
+import { recipeTemplates } from "../data/recipeTemplates";
 
 const food = (id: string, category: Food["category"], overrides: Partial<Food> = {}): Food => ({
   id,
   name: id,
   category,
+  ingredientKind: category === "protein"
+    ? "raw_meat"
+    : category === "carb"
+      ? "rice"
+      : category === "vegetable"
+        ? "vegetable"
+        : category === "fruit"
+          ? "fruit"
+          : category === "fat_sauce"
+            ? "sauce"
+            : "composite",
   nutritionBasis: "per_100g",
   nutrition: { calories: 100, protein: category === "protein" ? 20 : 3, carbs: 10, fat: 2, fibre: 2 },
   defaultServing: 100,
@@ -31,7 +43,7 @@ const food = (id: string, category: Food["category"], overrides: Partial<Food> =
 });
 
 const template = (overrides: Partial<RecipeTemplate> = {}): RecipeTemplate => ({
-  id: "test-meal",
+  id: "rice-bowl",
   name: "Test Meal",
   mealTypes: ["lunch"],
   cookingTime: 10,
@@ -202,8 +214,8 @@ describe("weighted random selection", () => {
 
 describe("meal regeneration variants", () => {
   const variantFoods = () => [
-    food("egg", "protein"),
-    food("wholemeal-toast", "carb"),
+    food("egg", "protein", { ingredientKind: "egg" }),
+    food("wholemeal-toast", "carb", { ingredientKind: "bread" }),
     food("spinach", "vegetable"),
   ];
   const variantTemplate = template({ id: "eggs-toast-plate" });
@@ -316,6 +328,72 @@ const referenceUserFood = (referenceId: string, inStock = true): Food => createU
   referenceFoods.find((item) => item.id === referenceId)!,
   { id: `user-${referenceId}`, inStock },
 );
+
+describe("custom IngredientKind generation", () => {
+  const ham = () => food("custom-ham", "protein", {
+    name: "My Ham",
+    ingredientKind: "cooked_meat",
+    tags: ["lunch", "savoury", "no_cook"],
+  });
+  const spinach = () => food("custom-spinach", "vegetable", {
+    ingredientKind: "vegetable",
+    tags: ["lunch", "savoury", "no_cook", "hob"],
+  });
+
+  it("uses a custom pasta base in the standard pasta blueprint", () => {
+    const pasta = food("barilla-spaghetti", "carb", { name: "Barilla Spaghetti", ingredientKind: "pasta" });
+    const result = generateMeal({
+      foods: [pasta, ham(), spinach()],
+      constraints: constraints(),
+      target,
+      templates: recipeTemplates.filter((item) => item.id === "pasta"),
+      random: () => 0,
+    });
+
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.meal).toMatchObject({ recipeTemplateId: "pasta", techniqueId: "pasta_toss" });
+  });
+
+  it.each([
+    ["microwave-rice", "rice", "rice-bowl", "rice_bowl_assemble"],
+    ["large-flatbread", "wrap", "wrap", "wrap_fill"],
+  ] as const)("uses custom %s semantics in its matching blueprint", (id, ingredientKind, blueprintId, techniqueId) => {
+    const base = food(id, "carb", { ingredientKind });
+    const result = generateMeal({
+      foods: [base, ham(), spinach()],
+      constraints: constraints(),
+      target,
+      templates: recipeTemplates.filter((item) => item.id === blueprintId),
+      random: () => 0,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.meal.techniqueId).toBe(techniqueId);
+  });
+
+  it("forms a relaxed Ham and Spinach Pasta but rejects Milk, Pasta and Banana", () => {
+    const pasta = food("custom-pasta", "carb", { ingredientKind: "pasta" });
+    const valid = generateMeal({
+      foods: [ham(), pasta, spinach()],
+      constraints: constraints(),
+      target,
+      templates: [],
+      random: () => 0,
+    });
+    expect(valid.ok).toBe(true);
+    if (valid.ok) expect(valid.meal.techniqueId).toBe("pasta_toss");
+
+    const milk = food("custom-milk", "protein", { ingredientKind: "milk", tags: ["lunch", "no_cook"] });
+    const banana = food("custom-banana", "fruit", { ingredientKind: "fruit", tags: ["lunch", "no_cook"] });
+    const invalid = generateMeal({
+      foods: [milk, pasta, banana],
+      constraints: constraints(),
+      target,
+      templates: [],
+      random: () => 0,
+    });
+    expect(invalid.ok).toBe(false);
+  });
+});
 
 describe("standard-first relaxed composition", () => {
   it("keeps standard blueprints ahead of relaxed candidates when a standard match exists", () => {

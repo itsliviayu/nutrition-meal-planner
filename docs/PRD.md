@@ -368,6 +368,7 @@ brand
 store
 
 category
+ingredientKind (optional on persisted User Food; required on Reference Food)
 
 nutrition:
   calories
@@ -422,6 +423,8 @@ fibreSourceMethod (optional):
 
 `referenceFoodId`只存在于从系统参考食品创建的User Food中，用于记录来源和进行简单重复判断。它不是Food的主键。
 
+`FoodCategory`表示营养与餐食结构分类；`IngredientKind`表示食材的烹饪身份。当前结构化类型包括egg、cooked/raw meat、fish/seafood、tofu/legume、yogurt/dairy、cheese、milk、bread、pasta、rice、noodles、wrap、oats、potato、grain、cereal、vegetable、fruit、sauce、spread、oil/fat、composite及保守的other类型。系统不根据`name`猜测类型。
+
 系统中的食品数据分为两个层级：
 
 ### Reference Food
@@ -433,6 +436,7 @@ Reference Food：
 * 提供标准估算营养数据和默认份量
 * 作为Common Food搜索的数据源
 * 保存搜索别名和可追溯的营养来源元数据
+* 每一项都通过category default + explicit override获得明确的`IngredientKind`
 * 不直接作为用户可编辑的库存记录
 * 不因用户修改自己的食品而改变
 
@@ -447,7 +451,13 @@ User Food可以：
 * 从Reference Food复制创建
 * 通过包装营养表手动创建
 * 使用用户自行估算的数据创建
-* 独立修改default serving、store和各类状态
+* 独立修改name、brand、store、default serving、状态、tags和compatible meals
+* 继承Reference Food的`IngredientKind`，并可在自己的copy上覆盖而不修改Reference Food
+* 在保留`referenceFoodId`来源关系的同时，把营养来源切换为`package_label`或`manual_estimate`
+
+`referenceFoodId`表达“这条User Food源自哪个系统参考食品”，不表示User Food必须永远使用系统名称或reference nutrition。Reference Food始终只读；User Food的身份、规划偏好和营养来源分别保存，后续编辑任何User Food都不会回写或污染Reference Food。
+
+Custom / packaged Food表单在Category后显示按当前category过滤的`Ingredient type / 食材类型`。该字段只影响菜品组合与做法，不修改营养数据。旧V6 User Food可以没有显式字段；运行时按“User Food显式值 → `referenceFoodId`对应Reference Food → FoodCategory保守默认”取得effective IngredientKind，不做名称推断。
 
 ---
 
@@ -516,6 +526,12 @@ nutritionSource = manual_estimate
 
 UI以中性的“Manual estimate”标识，不把估算来源显示成错误或警告。
 
+### Reference-linked User Food编辑规则
+
+当User Food仍使用`nutritionSource = reference`时，完整表单允许编辑名称、品牌、商店、默认份量、库存状态、常购、收藏、tags和compatible meals，但reference nutrition数值与nutrition basis只读。用户可以明确切换到Package label或Manual estimate后填写自己的营养数据；该操作保留`referenceFoodId`，因此来源关系不会因营养来源改变而丢失。
+
+对于仍有关联Reference Food的User Food，界面提供`Use reference nutrition`。该操作恢复Reference Food的官方nutrition、nutrition basis、营养来源与fibre/source metadata，同时保留用户自己的名称、品牌、商店、default serving、状态、tags和compatible meals。
+
 ---
 
 ### 原则
@@ -576,6 +592,13 @@ Search → Select → Confirm
 * Favourite
 * Optional Store
 
+确认页同时提供两个明确动作：
+
+* `Add to My Foods`：使用当前极简确认值直接创建User Food copy
+* `Add & Customize`：打开完整Food Form，并以所选Reference Food建立一份尚未保存的draft
+
+`Add & Customize`不会在进入表单时写入My Foods；只有用户提交表单后才创建User Food，取消或返回不会留下半成品记录。
+
 用户不需要重新填写Calories、Protein、Carbs、Fat或Fibre。
 
 保存时系统创建一份独立User Food copy，并设置：
@@ -596,7 +619,9 @@ nutritionSource = reference
 并提供：
 
 * View existing food
-* Add anyway
+* Create customized copy
+
+普通Quick Add和Multi Add继续执行严格重复检查，不静默创建相同Reference Food。只有用户明确选择`Create customized copy`或`Add & Customize`并提交完整表单时，才允许创建具有相同`referenceFoodId`的第二条User Food；每条copy拥有独立`id`和独立可变数据。
 
 ### Select multiple
 
@@ -976,7 +1001,9 @@ activePlanningMode = "inventory"
 
 应该采用：
 
-> Constraints → Candidate Generation → Nutrition Calculation → Scoring → Random Selection
+> User Food → Food Category → Ingredient Kind → Derived Recipe Roles → Meal Blueprint → Cooking Technique → Nutrition Calculation → Candidate Scoring → Recipe Variant
+
+Ingredient Semantics完全来自结构化字段与既有tags，并以确定性规则派生，不使用AI或自由文本名称推断。
 
 ---
 
@@ -1012,7 +1039,7 @@ chicken
 
 ## Step 2：生成候选组合
 
-生成器先使用14个标准Meal Blueprints匹配完整结构。只有标准候选为0时，才进入Relaxed Composition，以meal type、FoodCategory、meal compatibility和tags组合更少但仍合理的食材，并要求至少一个兼容Cooking Technique。
+生成器先使用14个标准Meal Blueprints匹配完整结构。Blueprint的关键identity slot使用IngredientKind，因此完全Custom的pasta、rice、wrap或oats也可进入对应结构。只有标准候选为0时，才进入Relaxed Composition，以meal type、FoodCategory、IngredientKind、派生Recipe Roles、meal compatibility和tags组合更少但仍合理的食材，并要求至少一个语义合法且兼容的Cooking Technique。
 
 例如：
 
@@ -1085,7 +1112,11 @@ Nutrition Fit属于排序信号，不是把合理候选全部清零的Hard Const
 
 40%
 
-### Ingredient Compatibility
+### Structural Fill
+
+5%
+
+### Culinary Semantic Fit
 
 20%
 
@@ -1095,7 +1126,7 @@ Nutrition Fit属于排序信号，不是把合理候选全部清零的Hard Const
 
 ### Variety
 
-10%
+5%
 
 ### User Preference
 
@@ -1311,10 +1342,12 @@ Structured JSON
 
 # 22. Recipe System
 
-V1采用两层确定性Recipe架构：
+V1采用确定性的Ingredient Semantics + Recipe架构：
 
 ```text
-Ingredient Composition
+User Food
+→ FoodCategory + IngredientKind
+→ Derived Recipe Roles / Cooking Capabilities
 → Meal Blueprint（现有RecipeTemplate兼容名称）
 → Compatible Cooking Techniques
 → Recipe Variant
@@ -1324,7 +1357,9 @@ Ingredient Composition
 
 Cooking Technique按通用烹饪方式定义，而不是按具体食物配对扩张。当前包括scramble、omelette、pan sear、stir fry、boil and assemble、toast topping、cold assemble、oven roast、pasta toss、rice bowl assemble、wrap fill、yogurt bowl和oat bowl。
 
-Technique compatibility由actual User Foods、FoodCategory、tags、blueprint slots、meal type、equipment和max cooking time确定。禁止使用LLM判断，也不得加入MealPlan中不存在的油、黄油、芝士、奶油或酱料。
+Recipe Roles（base、main protein、filling、topping、mix-in、side、sauce、liquid）与ready-to-eat、pan、stir-fry、oven、cold-assembly capabilities由IngredientKind、FoodCategory和tags即时派生，不作为重复状态持久化。
+
+Technique compatibility由actual User Foods、IngredientKind、派生semantics、FoodCategory、tags、blueprint slots、meal type、equipment和max cooking time确定。pasta、rice、bread、wrap、yogurt、oats与egg等主要身份检查不再依赖固定food ID。禁止使用LLM判断，也不得加入MealPlan中不存在的油、黄油、芝士、奶油或酱料。
 
 ---
 
@@ -1645,7 +1680,7 @@ Shopping List只保存用户明确准备购买的结构化食品记录。来源�
 * saved recipe
 * manual（从My Foods手动加入）
 
-同一User Food或同一`referenceFoodId`只保留一条Shopping Item；如果来自多个位置，可以合并来源，但不重复展示。
+Shopping Item优先以明确的User Food `foodId`识别。同一User Food来自多个位置时合并来源而不重复展示；两个拥有相同`referenceFoodId`但不同`foodId`的自定义User Food variant保持为独立条目，避免把不同品牌、名称或营养版本误合并。
 
 `Mark as Bought`采用简单完成方式：
 
@@ -1660,6 +1695,8 @@ Reference-only item
 → inStock = true
 → 移除对应shopping record
 ```
+
+匹配顺序是：精确`foodId`优先；没有`foodId`时，只有`referenceFoodId`在My Foods中唯一命中才可更新该User Food。若同一Reference Food已有多个User Food variants且Shopping Item没有精确`foodId`，界面显示无法安全选择并禁用Mark as Bought，不随机修改任意一条，也不额外创建第三条copy。
 
 移除Shopping Item只删除shopping record，不删除My Foods中的User Food。
 
@@ -1960,7 +1997,8 @@ Excluded foods
 Reference Food与User Food的名称规则保持数据边界：
 
 * 161个Reference Foods使用系统维护的中英文名称映射；底层`id`、营养、来源和匹配字段不变
-* 从Reference Food创建的User Food可通过`referenceFoodId`显示当前语言的系统名称
+* 从Reference Food创建且仍保留canonical名称的User Food可通过`referenceFoodId`显示当前语言的系统名称
+* reference-linked User Food一旦由用户自定义名称，My Foods、编辑页与Shopping均优先原样显示该User Food名称；canonical Reference Food名称与来源另行展示
 * 用户自行创建的Custom Food始终原样显示用户输入名称，不自动翻译
 * 找不到安全映射时回退到已有名称
 
@@ -1999,6 +2037,10 @@ Phase 3B新增`shoppingItems`，因此persist版本从V4升级为V5。Missing In
 Phase 4新增用户语言偏好`locale`，因此persist版本从V5升级为V6。`locale`只影响显示；没有有效语言值的旧状态默认迁移为`zh-CN`。
 
 Blueprint/Technique refinement为`MealPlan`和`SavedRecipe`增加可选`techniqueId`。该字段是向后兼容的嵌套元数据；旧plan可确定性选择默认兼容technique，旧Saved Recipe回退原snapshot，因此persist版本保持V6，不清空、不重建localStorage。
+
+Reference-linked User Food自定义、营养来源切换和同源多variant继续复用现有Food字段；Add & Customize的未保存draft与Shopping歧义提示不持久化。因此本次能力不升级schema，localStorage继续保持V6，既有用户数据无需迁移或重建。
+
+Ingredient Semantics为`Food`增加可选`ingredientKind`。Reference Foods在静态构建时始终解析出明确值；新User Food copy继承该值，Custom Food保存用户选择。旧V6记录通过effective IngredientKind回退即时兼容，因此不升级persist版本、不补写或清空既有localStorage。
 
 V2 → V3 migration：
 
@@ -2054,7 +2096,7 @@ locale = valid persisted locale ?? "zh-CN"
 
 ## 当前阶段状态
 
-Phase 4 Chinese Localization & Mobile Readiness已完成。当前产品支持中文与英文即时切换、161个Reference Food中文显示、14个Meal Blueprints + 13个Cooking Techniques的deterministic recipe variants、Saved Recipe variant snapshot，以及约390px移动端与基础Add to Home Screen meta适配。Reference Food Library现支持完整分类浏览、全量搜索和跨分类批量建立My Foods；Meal Generator的数据边界与规则不变。所有能力仍只使用本地结构化数据与localStorage，不引入新的服务端能力。
+Phase 4 Chinese Localization & Mobile Readiness及Ingredient Semantics V1已完成。当前产品支持中文与英文即时切换、161个Reference Food中文显示与明确IngredientKind、14个Meal Blueprints + 13个Cooking Techniques的deterministic recipe variants、Saved Recipe variant snapshot，以及约390px移动端与基础Add to Home Screen meta适配。Reference Food Library现支持完整分类浏览、全量搜索和跨分类批量建立My Foods；Meal Generator只读取User Foods，并使用结构化culinary identity与派生roles判断组合。所有能力仍只使用本地结构化数据与localStorage，不引入新的服务端能力。
 
 Natural Language Planning明确为`Deferred / Not included in current V1`，不属于当前Localization阶段。尚未实现的能力包括：
 

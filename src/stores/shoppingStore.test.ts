@@ -125,4 +125,31 @@ describe("Shopping store", () => {
     expect(useAppStore.getState().shoppingItems).toEqual([]);
     expect(useAppStore.getState().foods).toEqual([food]);
   });
+
+  it("marks only the explicitly foodId-bound variant as bought", () => {
+    const first = createUserFoodFromReference(codReference, { id: "cod-one", name: "Tesco cod", inStock: false });
+    const second = createUserFoodFromReference(codReference, { id: "cod-two", name: "Market cod", inStock: false });
+    const item: ShoppingItem = {
+      ...referenceShoppingItem(),
+      id: "shopping-cod-one",
+      foodId: first.id,
+      displayName: first.name,
+    };
+    resetStore([first, second], [item]);
+
+    expect(useAppStore.getState().markShoppingItemBought(item.id)).toBe(true);
+    expect(useAppStore.getState().foods.map((food) => food.inStock)).toEqual([true, false]);
+    expect(useAppStore.getState().shoppingItems).toEqual([]);
+  });
+
+  it("keeps a reference-only Shopping Item untouched when multiple variants make the match ambiguous", () => {
+    const first = createUserFoodFromReference(codReference, { id: "cod-one", name: "Tesco cod", inStock: false });
+    const second = createUserFoodFromReference(codReference, { id: "cod-two", name: "Market cod", inStock: false });
+    const item = referenceShoppingItem();
+    resetStore([first, second], [item]);
+
+    expect(useAppStore.getState().markShoppingItemBought(item.id)).toBe(false);
+    expect(useAppStore.getState().foods.map((food) => food.inStock)).toEqual([false, false]);
+    expect(useAppStore.getState().shoppingItems).toEqual([item]);
+  });
 });

@@ -20,6 +20,7 @@ interface AddFoodPageProps {
   onSelectReference: (referenceFoodId: string) => void;
   onAddCustom: () => void;
   onViewExisting: (foodId: string) => void;
+  onCustomizeReference: (referenceFoodId: string) => void;
   onMultiAddComplete: (count: number) => void;
 }
 
@@ -29,7 +30,7 @@ const basisLabel = {
   per_unit: "piece",
 };
 
-export function AddFoodPage({ onSelectReference, onAddCustom, onViewExisting, onMultiAddComplete }: AddFoodPageProps) {
+export function AddFoodPage({ onSelectReference, onAddCustom, onViewExisting, onCustomizeReference, onMultiAddComplete }: AddFoodPageProps) {
   const { categoryName, locale, referenceFoodName, t } = useLocale();
   const foods = useAppStore((state) => state.foods);
   const addFoods = useAppStore((state) => state.addFoods);
@@ -118,7 +119,7 @@ export function AddFoodPage({ onSelectReference, onAddCustom, onViewExisting, on
           <div><strong>{t("addFood.duplicateTitle", { name: referenceFoodName(duplicate.reference) })}</strong><span>{t("addFood.duplicateBody")}</span></div>
           <div>
             <button type="button" className="secondary-button" onClick={() => onViewExisting(duplicate.existing.id)}>{t("addFood.viewExisting")}</button>
-            <button type="button" className="text-button" onClick={() => onSelectReference(duplicate.reference.id)}>{t("addFood.addAnyway")}</button>
+            <button type="button" className="text-button" onClick={() => onCustomizeReference(duplicate.reference.id)}>{t("addFood.createCustomizedCopy")}</button>
           </div>
         </aside>
       )}

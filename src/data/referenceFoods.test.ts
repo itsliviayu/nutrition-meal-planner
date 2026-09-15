@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { FoodCategory } from "../types";
+import { isIngredientKindCompatibleWithCategory } from "./ingredientKinds";
 import { initialUserFoods } from "./initialFoods";
 import { referenceFoods } from "./referenceFoods";
 import {
@@ -42,12 +43,45 @@ describe("reference food catalogue", () => {
       expect(food.referenceSourceId).toMatch(/^(\d{2}-\d{3,4}|\d+)$/);
       expect(food.referenceSourceUrl).toMatch(/^https:\/\//);
       expect(food.aliases).toBeInstanceOf(Array);
+      expect(isIngredientKindCompatibleWithCategory(food.ingredientKind, food.category)).toBe(true);
       expect(food.fibreSourceMethod).not.toBe("NSP");
       if (food.nutrition.fibre !== undefined) expect(food.fibreSourceMethod).toBe("AOAC");
       Object.values(food.nutrition).forEach((value) => {
         expect(Number.isFinite(value)).toBe(true);
         expect(value).toBeGreaterThanOrEqual(0);
       });
+    });
+  });
+
+  it("assigns a valid culinary identity to all 161 foods and preserves key identities", () => {
+    expect(referenceFoods.every((food) => Boolean(food.ingredientKind))).toBe(true);
+    expect(Object.fromEntries([
+      "egg",
+      "boiled-ham",
+      "chicken-breast",
+      "greek-yogurt",
+      "semi-skimmed-milk",
+      "wholemeal-toast",
+      "pasta",
+      "white-rice",
+      "tortilla-wrap",
+      "oats",
+      "tomato-pasta-sauce",
+    ].map((id) => {
+      const food = referenceFoods.find((item) => item.id === id)!;
+      return [id, food.ingredientKind];
+    }))).toEqual({
+      egg: "egg",
+      "boiled-ham": "cooked_meat",
+      "chicken-breast": "raw_meat",
+      "greek-yogurt": "yogurt_dairy",
+      "semi-skimmed-milk": "milk",
+      "wholemeal-toast": "bread",
+      pasta: "pasta",
+      "white-rice": "rice",
+      "tortilla-wrap": "wrap",
+      oats: "oats",
+      "tomato-pasta-sauce": "sauce",
     });
   });
 
@@ -111,6 +145,7 @@ describe("reference food catalogue", () => {
       expect(food.id).toBe(`starter-${food.referenceFoodId}`);
       expect(food.nutritionSource).toBe("reference");
       expect(referenceFoods.some((reference) => reference.id === food.referenceFoodId)).toBe(true);
+      expect(food.ingredientKind).toBe(referenceFoods.find((reference) => reference.id === food.referenceFoodId)?.ingredientKind);
     });
   });
 });

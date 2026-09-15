@@ -11,9 +11,10 @@ interface ConfirmCommonFoodPageProps {
   referenceFoodId?: string;
   onDone: () => void;
   onBack: () => void;
+  onCustomize: (referenceFoodId: string) => void;
 }
 
-export function ConfirmCommonFoodPage({ referenceFoodId, onDone, onBack }: ConfirmCommonFoodPageProps) {
+export function ConfirmCommonFoodPage({ referenceFoodId, onDone, onBack, onCustomize }: ConfirmCommonFoodPageProps) {
   const { categoryName, referenceFoodName, t } = useLocale();
   const referenceFood = referenceFoods.find((food) => food.id === referenceFoodId);
   const addFood = useAppStore((state) => state.addFood);
@@ -50,7 +51,7 @@ export function ConfirmCommonFoodPage({ referenceFoodId, onDone, onBack }: Confi
     <form className="quick-confirm" onSubmit={handleSubmit} noValidate>
       <section className="quick-confirm__identity">
         <span className={`reference-food-row__mark reference-food-row__mark--large category-dot--${referenceFood.category}`}>{referenceFoodName(referenceFood).charAt(0)}</span>
-        <div><span className="section-kicker">{t("confirm.referenceNutrition")}</span><h2>{referenceFoodName(referenceFood)}</h2><p>{categoryName(referenceFood.category)} · {t("common.standardEstimate")}</p></div>
+        <div><span className="section-kicker">{t("confirm.referenceNutrition")}</span><h2>{referenceFoodName(referenceFood)}</h2><p>{categoryName(referenceFood.category)} · {t("common.standardEstimate")}</p><small>{referenceFood.referenceSourceName}</small></div>
       </section>
 
       <PortionNutritionPreview food={referenceFood} amount={parseNumericDraft(defaultServing) ?? 0} unit={referenceFood.servingUnit} />
@@ -67,7 +68,11 @@ export function ConfirmCommonFoodPage({ referenceFoodId, onDone, onBack }: Confi
       </section>
 
       {error && <div className="form-errors" role="alert">{error}</div>}
-      <div className="quick-confirm__actions"><button type="button" className="secondary-button" onClick={onBack}>{t("action.back")}</button><button type="submit" className="primary-button">{t("confirm.add")}</button></div>
+      <div className="quick-confirm__actions">
+        <button type="button" className="text-button" onClick={onBack}>{t("action.back")}</button>
+        <button type="button" className="secondary-button" onClick={() => onCustomize(referenceFood.id)}>{t("confirm.addCustomize")}</button>
+        <button type="submit" className="primary-button">{t("confirm.add")}</button>
+      </div>
     </form>
   );
 }

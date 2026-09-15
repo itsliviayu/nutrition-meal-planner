@@ -7,10 +7,10 @@ import {
   getPlanNeededFoods,
   getSuggestionBatch,
   getTrySomethingNewSuggestions,
+  resolveShoppingItemUserFood,
   shoppingIdentityKey,
 } from "../engine/shoppingEngine";
 import { selectActiveDailyPlan, useAppStore } from "../stores/useAppStore";
-import { getReferenceFoodDisplayName } from "../i18n/locale";
 import { getRecipeTemplateDisplayName } from "../i18n/recipeLocalizations";
 import { useLocale } from "../i18n/useLocale";
 import type { ShoppingItemSource } from "../types";
@@ -89,23 +89,35 @@ export function ShopPage() {
         ) : (
           <ul className="shopping-list">
             {shoppingItems.map((item) => {
-              const currentFood = foods.find((food) => food.id === item.foodId)
-                ?? (item.referenceFoodId ? foods.find((food) => food.referenceFoodId === item.referenceFoodId) : undefined);
-              const referenceAvailable = Boolean(item.referenceFoodId
-                && referenceFoods.some((reference) => reference.id === item.referenceFoodId));
-              const canMarkBought = Boolean(currentFood || referenceAvailable);
+              const currentFood = resolveShoppingItemUserFood(item, foods);
+              const referenceFood = item.referenceFoodId
+                ? referenceFoods.find((reference) => reference.id === item.referenceFoodId)
+                : undefined;
+              const referenceMatches = item.referenceFoodId
+                ? foods.filter((food) => food.referenceFoodId === item.referenceFoodId)
+                : [];
+              const ambiguousReference = !foods.some((food) => food.id === item.foodId)
+                && referenceMatches.length > 1;
+              const referenceAvailable = Boolean(referenceFood);
+              const canMarkBought = !ambiguousReference && Boolean(currentFood || referenceAvailable);
+              const displayName = currentFood
+                ? foodName(currentFood)
+                : referenceFood
+                  ? referenceFoodName(referenceFood)
+                  : item.displayName;
               return (
                 <li key={item.id}>
                   <div className="shopping-list__copy">
-                    <strong>{getReferenceFoodDisplayName(item.referenceFoodId, item.displayName, locale)}</strong>
+                    <strong>{displayName}</strong>
                     <span>{item.sources.length > 1 ? t("shop.neededPlaces", { count: item.sources.length }) : sourceLabels[item.sources[0]]}</span>
                     {!currentFood && !referenceAvailable && <small>{t("recipe.stockUnavailable")}</small>}
+                    {ambiguousReference && <small>{t("shop.ambiguousVariants")}</small>}
                   </div>
                   <div className="shopping-list__actions">
                     <button className="shop-buy-button" type="button" disabled={!canMarkBought} onClick={() => markShoppingItemBought(item.id)}>
                       {t(currentFood ? "shop.markBought" : referenceAvailable ? "shop.addMarkBought" : "common.unavailable")}
                     </button>
-                    <button className="shop-remove-button" type="button" onClick={() => removeShoppingItem(item.id)} aria-label={t("shop.removeA11y", { name: getReferenceFoodDisplayName(item.referenceFoodId, item.displayName, locale) })}>{t("action.remove")}</button>
+                    <button className="shop-remove-button" type="button" onClick={() => removeShoppingItem(item.id)} aria-label={t("shop.removeA11y", { name: displayName })}>{t("action.remove")}</button>
                   </div>
                 </li>
               );

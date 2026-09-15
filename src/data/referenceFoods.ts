@@ -1,12 +1,14 @@
 import type {
   FoodCategory,
   FoodTag,
+  IngredientKind,
   MealType,
   Nutrition,
   NutritionBasis,
   ReferenceFood,
   ServingUnit,
 } from "../types";
+import { ingredientKindForReference } from "./ingredientKinds";
 
 const COFID_SOURCE_NAME = "UK CoFID 2021";
 const COFID_SOURCE_URL =
@@ -17,6 +19,7 @@ interface ReferenceFoodInput {
   name: string;
   aliases?: string[];
   category: FoodCategory;
+  ingredientKind?: IngredientKind;
   referenceSourceId: string;
   referenceSourceName?: string;
   referenceSourceUrl?: string;
@@ -52,6 +55,7 @@ const referenceFood = ({
   ...food
 }: ReferenceFoodInput): ReferenceFood => ({
   ...food,
+  ingredientKind: food.ingredientKind ?? ingredientKindForReference(food.id, food.category),
   aliases: [...aliases],
   servingUnit,
   nutritionBasis,

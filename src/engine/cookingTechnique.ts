@@ -1,10 +1,12 @@
 import { cookingTechniques } from "../data/cookingTechniques";
+import { deriveFoodSemantics, effectiveIngredientKind, foodHasRole } from "./foodSemantics";
 import { getFoodDisplayName, type Locale } from "../i18n/locale";
 import type {
   CookingTechnique,
   CookingTechniqueId,
   Equipment,
   Food,
+  IngredientKind,
   MealType,
   RecipeTemplate,
 } from "../types";
@@ -12,14 +14,8 @@ import type {
 const identities = (food: Food): string[] => [food.id, food.referenceFoodId].filter(Boolean) as string[];
 const hasIdentity = (food: Food, ids: string[]): boolean => identities(food).some((id) => ids.includes(id));
 const hasAnyIdentity = (foods: Food[], ids: string[] = []): boolean => foods.some((food) => hasIdentity(food, ids));
-
-const eggIds = ["egg"];
-const dairyBowlIds = ["greek-yogurt", "skyr", "cottage-cheese"];
-const breadIds = ["wholemeal-toast", "white-bread", "bagel"];
-const pastaIds = ["pasta", "wholewheat-pasta"];
-const riceIds = ["white-rice", "brown-rice"];
-const boilableCarbIds = [...pastaIds, ...riceIds, "egg-noodles", "potato", "sweet-potato", "couscous"];
-const panExcludedProteinIds = [...dairyBowlIds, "egg", "tuna-spring-water"];
+const hasKind = (food: Food, kinds: IngredientKind[]): boolean => kinds.includes(effectiveIngredientKind(food));
+const hasAnyKind = (foods: Food[], kinds: IngredientKind[] = []): boolean => foods.some((food) => hasKind(food, kinds));
 
 const allCategoriesAllowed = (technique: CookingTechnique, foods: Food[]): boolean =>
   !technique.allowedCategories || foods.every((food) => technique.allowedCategories!.includes(food.category));
@@ -32,34 +28,49 @@ const matchesTechniqueRule = (technique: CookingTechnique, foods: Food[]): boole
   const vegetables = foods.filter((food) => food.category === "vegetable");
   switch (technique.rule) {
     case "egg_cook":
-      return hasAnyIdentity(foods, eggIds)
-        && proteins.every((food) => hasIdentity(food, eggIds));
+      return hasAnyKind(foods, ["egg"])
+        && proteins.every((food) => hasKind(food, ["egg", "cooked_meat", "cheese", "tofu_legume"]));
     case "pan_cook":
-      return proteins.some((food) => !hasIdentity(food, panExcludedProteinIds));
+      return proteins.some((food) => deriveFoodSemantics(food).capabilities.panCookable
+        && hasKind(food, ["raw_meat", "fish_seafood", "tofu_legume", "other_protein"]));
     case "stir_fry":
       return vegetables.length > 0
-        && proteins.some((food) => !hasIdentity(food, dairyBowlIds));
+        && proteins.some((food) => deriveFoodSemantics(food).capabilities.stirFryable
+          && hasKind(food, ["raw_meat", "cooked_meat", "fish_seafood", "tofu_legume", "other_protein"]));
     case "carb_assemble":
-      return hasAnyIdentity(foods, boilableCarbIds);
+      return hasAnyKind(foods, ["pasta", "rice", "noodles", "potato", "grain", "other_carb"])
+        && foods.every((food) => hasKind(food, ["pasta", "rice", "noodles", "potato", "grain", "other_carb", "raw_meat", "cooked_meat", "fish_seafood", "tofu_legume", "other_protein", "cheese", "vegetable", "sauce", "spread", "oil_fat", "composite"]));
     case "toast_topping":
-      return hasAnyIdentity(foods, breadIds) && foods.some((food) => !hasIdentity(food, breadIds));
+      return hasAnyKind(foods, ["bread"])
+        && foods.filter((food) => !hasKind(food, ["bread"])).every((food) =>
+          (foodHasRole(food, "filling") || foodHasRole(food, "topping") || foodHasRole(food, "side") || foodHasRole(food, "sauce"))
+          && (deriveFoodSemantics(food).capabilities.coldAssemblyCompatible || hasKind(food, ["egg", "vegetable"])))
+        && foods.some((food) => !hasKind(food, ["bread"])
+          && (foodHasRole(food, "filling") || foodHasRole(food, "topping"))
+          && (deriveFoodSemantics(food).capabilities.coldAssemblyCompatible || hasKind(food, ["egg", "vegetable"])));
     case "cold_assemble":
-      return foods.every((food) => food.category === "fruit"
-        || food.tags.includes("no_cook")
-        || hasIdentity(food, [...breadIds, "tortilla-wrap"]));
+      return foods.every((food) => deriveFoodSemantics(food).capabilities.coldAssemblyCompatible);
     case "oven_roast":
-      return foods.filter((food) => food.category !== "fat_sauce")
-        .every((food) => food.tags.includes("oven") || hasIdentity(food, ["potato", "sweet-potato"]));
+      return foods.filter((food) => !foodHasRole(food, "sauce"))
+        .every((food) => deriveFoodSemantics(food).capabilities.ovenCookable)
+        && proteins.every((food) => foodHasRole(food, "main_protein"));
     case "pasta":
-      return hasAnyIdentity(foods, pastaIds);
+      return hasAnyKind(foods, ["pasta"])
+        && foods.every((food) => hasKind(food, ["pasta", "raw_meat", "cooked_meat", "fish_seafood", "tofu_legume", "other_protein", "cheese", "vegetable", "sauce", "spread", "oil_fat"]));
     case "rice":
-      return hasAnyIdentity(foods, riceIds);
+      return hasAnyKind(foods, ["rice"])
+        && proteins.every((food) => foodHasRole(food, "main_protein") || foodHasRole(food, "filling"))
+        && foods.filter((food) => !hasKind(food, ["rice"])).every((food) => deriveFoodSemantics(food).capabilities.coldAssemblyCompatible);
     case "wrap":
-      return hasAnyIdentity(foods, ["tortilla-wrap"]);
+      return hasAnyKind(foods, ["wrap"])
+        && proteins.every((food) => foodHasRole(food, "main_protein") || foodHasRole(food, "filling"))
+        && foods.filter((food) => !hasKind(food, ["wrap"])).every((food) => deriveFoodSemantics(food).capabilities.coldAssemblyCompatible);
     case "yogurt":
-      return hasAnyIdentity(foods, dairyBowlIds);
+      return hasAnyKind(foods, ["yogurt_dairy"])
+        && foods.every((food) => hasKind(food, ["yogurt_dairy", "fruit", "nuts_seeds", "spread", "cereal"]));
     case "oats":
-      return hasAnyIdentity(foods, ["oats"]);
+      return hasAnyKind(foods, ["oats"])
+        && foods.every((food) => hasKind(food, ["oats", "milk", "yogurt_dairy", "fruit", "nuts_seeds", "spread"]));
     default:
       return false;
   }
@@ -84,6 +95,9 @@ export const isTechniqueCompatible = (
   && (!allowedEquipment || technique.requiredEquipment.every((item) => allowedEquipment.includes(item)))
   && allCategoriesAllowed(technique, foods)
   && includesRequiredCategories(technique, foods)
+  && (!technique.requiredAnyIngredientKinds || hasAnyKind(foods, technique.requiredAnyIngredientKinds))
+  && (!technique.requiredAllIngredientKinds || technique.requiredAllIngredientKinds.every((kind) => hasAnyKind(foods, [kind])))
+  && (!technique.excludedIngredientKinds || !hasAnyKind(foods, technique.excludedIngredientKinds))
   && (!technique.requiredAnyFoodIds || hasAnyIdentity(foods, technique.requiredAnyFoodIds))
   && (!technique.requiredAllFoodIds || technique.requiredAllFoodIds.every((id) => hasAnyIdentity(foods, [id])))
   && (!technique.excludedFoodIds || !hasAnyIdentity(foods, technique.excludedFoodIds))
@@ -142,6 +156,18 @@ const instructionName = (food: Food, locale: Locale): string => locale === "zh-C
   ? getFoodDisplayName(food, locale)
   : readableEnglishName(food).toLocaleLowerCase("en-GB");
 
+const preparationStep = (food: Food, locale: Locale): string => {
+  const name = instructionName(food, locale);
+  const kind = effectiveIngredientKind(food);
+  if (kind === "raw_meat") return locale === "zh-CN" ? `将${name}彻底烹熟。` : `Cook the ${name} until cooked through.`;
+  if (kind === "fish_seafood") return locale === "zh-CN" ? `将${name}烹饪至完全熟透。` : `Cook the ${name} until fully cooked.`;
+  if (kind === "cooked_meat" && food.tags.includes("no_cook")) return locale === "zh-CN" ? `直接加入${name}，或按包装说明短暂加热。` : `Add the ${name} directly, or warm briefly according to the package instructions.`;
+  if (kind === "cooked_meat") return locale === "zh-CN" ? `按包装说明准备或加热${name}。` : `Prepare or heat the ${name} according to the package instructions.`;
+  if (kind === "egg") return locale === "zh-CN" ? `将${name}烹饪至凝固。` : `Cook the ${name} until set.`;
+  if (kind === "tofu_legume" || kind === "other_protein") return locale === "zh-CN" ? `按包装说明准备${name}至可食用。` : `Prepare the ${name} according to the package instructions.`;
+  return locale === "zh-CN" ? `按包装说明准备${name}。` : `Prepare the ${name} according to the package instructions.`;
+};
+
 const joinNames = (foods: Food[], locale: Locale): string => {
   const names = foods.map((food) => displayName(food, locale));
   if (locale === "zh-CN") return names.join("和");
@@ -151,7 +177,7 @@ const joinNames = (foods: Food[], locale: Locale): string => {
 
 const byCategory = (foods: Food[], category: Food["category"]): Food[] =>
   foods.filter((food) => food.category === category);
-const withoutIds = (foods: Food[], ids: string[]): Food[] => foods.filter((food) => !hasIdentity(food, ids));
+const withoutKinds = (foods: Food[], kinds: IngredientKind[]): Food[] => foods.filter((food) => !hasKind(food, kinds));
 
 export interface TechniqueRecipeContent {
   name: string;
@@ -168,14 +194,15 @@ export const buildTechniqueRecipe = (
   const fruit = byCategory(foods, "fruit");
   const carbs = byCategory(foods, "carb");
   const sauces = byCategory(foods, "fat_sauce");
-  const egg = foods.find((food) => hasIdentity(food, eggIds));
-  const toast = foods.find((food) => hasIdentity(food, breadIds));
-  const pasta = foods.find((food) => hasIdentity(food, pastaIds));
-  const rice = foods.find((food) => hasIdentity(food, riceIds));
-  const wrap = foods.find((food) => hasIdentity(food, ["tortilla-wrap"]));
-  const yogurt = foods.find((food) => hasIdentity(food, dairyBowlIds));
-  const oats = foods.find((food) => hasIdentity(food, ["oats"]));
-  const leadProtein = protein.find((food) => !hasIdentity(food, [...dairyBowlIds, ...eggIds])) ?? protein[0];
+  const egg = foods.find((food) => hasKind(food, ["egg"]));
+  const toast = foods.find((food) => hasKind(food, ["bread"]));
+  const pasta = foods.find((food) => hasKind(food, ["pasta"]));
+  const rice = foods.find((food) => hasKind(food, ["rice"]));
+  const wrap = foods.find((food) => hasKind(food, ["wrap"]));
+  const yogurt = foods.find((food) => hasKind(food, ["yogurt_dairy"]));
+  const oats = foods.find((food) => hasKind(food, ["oats"]));
+  const leadProtein = protein.find((food) => foodHasRole(food, "main_protein")
+    && !hasKind(food, ["egg", "yogurt_dairy", "cheese", "milk"])) ?? protein.find((food) => foodHasRole(food, "main_protein"));
   const sideCarbs = carbs.filter((food) => food !== pasta && food !== rice && food !== wrap && food !== oats);
   const sideText = (items: Food[]) => items.length ? joinNames(items, locale) : "";
   const names = (items: Food[]) => items.map((food) => instructionName(food, locale));
@@ -212,22 +239,22 @@ export const buildTechniqueRecipe = (
     const toppings = foods.filter((food) => food !== toast);
     return locale === "zh-CN" ? {
       name: `${sideText(toppings)}开放吐司`,
-      instructions: [`将${instructionName(toast!, locale)}烤至喜欢的酥脆程度。`, `按需处理${joinedInstructions(toppings)}。`, "把配料铺在吐司上，按口味少量调味后享用。"],
+      instructions: [`将${instructionName(toast!, locale)}烤至喜欢的酥脆程度。`, ...protein.map((food) => preparationStep(food, locale)), `按需处理${joinedInstructions(toppings)}。`, "把配料铺在吐司上，按口味少量调味后享用。"],
     } : {
       name: `${sideText(toppings)} Open Toast`,
-      instructions: [`Toast the ${instructionName(toast!, locale)} to your liking.`, `Prepare ${joinedInstructions(toppings)} as needed.`, "Arrange the toppings over the toast, season lightly to taste and serve."],
+      instructions: [`Toast the ${instructionName(toast!, locale)} to your liking.`, ...protein.map((food) => preparationStep(food, locale)), `Prepare ${joinedInstructions(toppings)} as needed.`, "Arrange the toppings over the toast, season lightly to taste and serve."],
     };
   }
 
   if (technique.id === "pasta_toss") {
-    const additions = withoutIds(foods, pastaIds);
+    const additions = withoutKinds(foods, ["pasta"]);
     const titleFoods = [...protein, ...vegetables].slice(0, 2);
     return locale === "zh-CN" ? {
       name: `${titleFoods.map((food) => readableChineseName(food)).join("")}意面`,
-      instructions: [`按包装说明煮热${instructionName(pasta!, locale)}。`, ...(leadProtein ? [`将${instructionName(leadProtein, locale)}彻底烹熟。`] : []), ...(vegetables.length ? [`加入${joinedInstructions(vegetables)}，炒至变软。`] : []), ...(sauces.length ? [`加入${joinedInstructions(sauces)}，拌匀。`] : []), `将${joinedInstructions(additions)}与意面拌匀后享用。`],
+      instructions: [`按包装说明煮热${instructionName(pasta!, locale)}。`, ...(leadProtein ? [preparationStep(leadProtein, locale)] : []), ...(vegetables.length ? [`加入${joinedInstructions(vegetables)}，炒至变软。`] : []), ...(sauces.length ? [`加入${joinedInstructions(sauces)}，拌匀。`] : []), `将${joinedInstructions(additions)}与意面拌匀后享用。`],
     } : {
       name: `${joinNames(titleFoods, locale)} Pasta`,
-      instructions: [`Cook or heat the ${instructionName(pasta!, locale)} according to the package instructions.`, ...(leadProtein ? [`Cook the ${instructionName(leadProtein, locale)} until cooked through.`] : []), ...(vegetables.length ? [`Add ${joinedInstructions(vegetables)} and cook until tender.`] : []), ...(sauces.length ? [`Stir in ${joinedInstructions(sauces)}.`] : []), `Toss ${joinedInstructions(additions)} with the pasta and serve.`],
+      instructions: [`Cook or heat the ${instructionName(pasta!, locale)} according to the package instructions.`, ...(leadProtein ? [preparationStep(leadProtein, locale)] : []), ...(vegetables.length ? [`Add ${joinedInstructions(vegetables)} and cook until tender.`] : []), ...(sauces.length ? [`Stir in ${joinedInstructions(sauces)}.`] : []), `Toss ${joinedInstructions(additions)} with the pasta and serve.`],
     };
   }
 
@@ -245,13 +272,13 @@ export const buildTechniqueRecipe = (
 
   if (technique.id === "stir_fry") {
     const titleFoods = [...vegetables, ...protein].slice(0, 2);
-    const servingCarbs = carbs.filter((food) => !hasIdentity(food, ["egg-noodles"]));
+    const servingCarbs = carbs.filter((food) => !hasKind(food, ["noodles"]));
     return locale === "zh-CN" ? {
       name: `${titleFoods.map((food) => readableChineseName(food)).join("")}快炒${servingCarbs.length ? `配${sideText(servingCarbs)}` : ""}`,
-      instructions: [`切好${joinedInstructions([...protein, ...vegetables])}。`, `先将${joinedInstructions(protein)}炒至接近熟透。`, `加入${joinedInstructions(vegetables)}，快速翻炒至变软。`, ...(sauces.length ? [`加入${joinedInstructions(sauces)}拌匀。`] : []), ...(servingCarbs.length ? [`与${joinedInstructions(servingCarbs)}一起享用。`] : ["按口味少量调味后享用。"])],
+      instructions: [`切好${joinedInstructions([...protein, ...vegetables])}。`, ...protein.map((food) => preparationStep(food, locale)), `加入${joinedInstructions(vegetables)}，快速翻炒至变软。`, ...(sauces.length ? [`加入${joinedInstructions(sauces)}拌匀。`] : []), ...(servingCarbs.length ? [`与${joinedInstructions(servingCarbs)}一起享用。`] : ["按口味少量调味后享用。"])],
     } : {
       name: `${joinNames(titleFoods, locale)} Stir-fry${servingCarbs.length ? ` with ${sideText(servingCarbs)}` : ""}`,
-      instructions: [`Prepare ${joinedInstructions([...protein, ...vegetables])}.`, `Cook ${joinedInstructions(protein)} in a hot pan until nearly cooked through.`, `Add ${joinedInstructions(vegetables)} and stir-fry until tender.`, ...(sauces.length ? [`Stir through ${joinedInstructions(sauces)}.`] : []), ...(servingCarbs.length ? [`Serve with ${joinedInstructions(servingCarbs)}.`] : ["Season lightly to taste and serve."])],
+      instructions: [`Prepare ${joinedInstructions([...protein, ...vegetables])}.`, ...protein.map((food) => preparationStep(food, locale)), `Add ${joinedInstructions(vegetables)} and stir-fry until tender.`, ...(sauces.length ? [`Stir through ${joinedInstructions(sauces)}.`] : []), ...(servingCarbs.length ? [`Serve with ${joinedInstructions(servingCarbs)}.`] : ["Season lightly to taste and serve."])],
     };
   }
 
@@ -259,10 +286,10 @@ export const buildTechniqueRecipe = (
     const sides = foods.filter((food) => food !== leadProtein && !sauces.includes(food));
     return locale === "zh-CN" ? {
       name: `香煎${displayName(leadProtein!, locale)}配${sideText(sides)}`,
-      instructions: [`准备好${instructionName(leadProtein!, locale)}和${joinedInstructions(sides)}。`, `用热锅将${instructionName(leadProtein!, locale)}煎至彻底熟透。`, `将${joinedInstructions(sides)}分别处理至可食用。`, ...(sauces.length ? [`搭配${joinedInstructions(sauces)}享用。`] : ["按口味少量调味后装盘。"])],
+      instructions: [`准备好${instructionName(leadProtein!, locale)}和${joinedInstructions(sides)}。`, preparationStep(leadProtein!, locale), `将${joinedInstructions(sides)}分别处理至可食用。`, ...(sauces.length ? [`搭配${joinedInstructions(sauces)}享用。`] : ["按口味少量调味后装盘。"])],
     } : {
       name: `Pan-seared ${displayName(leadProtein!, locale)} with ${sideText(sides)}`,
-      instructions: [`Prepare the ${instructionName(leadProtein!, locale)} and ${joinedInstructions(sides)}.`, `Cook the ${instructionName(leadProtein!, locale)} in a hot pan until cooked through.`, `Prepare ${joinedInstructions(sides)} until ready to eat.`, ...(sauces.length ? [`Serve with ${joinedInstructions(sauces)}.`] : ["Season lightly to taste and plate."])],
+      instructions: [`Prepare the ${instructionName(leadProtein!, locale)} and ${joinedInstructions(sides)}.`, preparationStep(leadProtein!, locale), `Prepare ${joinedInstructions(sides)} until ready to eat.`, ...(sauces.length ? [`Serve with ${joinedInstructions(sauces)}.`] : ["Season lightly to taste and plate."])],
     };
   }
 
@@ -270,10 +297,10 @@ export const buildTechniqueRecipe = (
     const main = foods.filter((food) => !sauces.includes(food));
     return locale === "zh-CN" ? {
       name: `${sideText(main.slice(0, 2))}烤盘餐`,
-      instructions: [`预热烤箱并处理好${joinedInstructions(main)}。`, "将食材均匀铺在烤盘上。", ...(sauces.length ? [`加入${joinedInstructions(sauces)}。`] : []), "烤至蛋白质完全熟透、蔬菜和根茎变软。", "按口味少量调味后享用。"],
+      instructions: [`预热烤箱并处理好${joinedInstructions(main)}。`, "将食材均匀铺在烤盘上。", ...protein.map((food) => preparationStep(food, locale)), ...(sauces.length ? [`加入${joinedInstructions(sauces)}。`] : []), "烤至蔬菜和根茎变软。", "按口味少量调味后享用。"],
     } : {
       name: `${sideText(main.slice(0, 2))} Tray Roast`,
-      instructions: [`Heat the oven and prepare ${joinedInstructions(main)}.`, "Arrange the ingredients evenly on a baking tray.", ...(sauces.length ? [`Add ${joinedInstructions(sauces)}.`] : []), "Roast until the protein is cooked through and the vegetables are tender.", "Season lightly to taste and serve."],
+      instructions: [`Heat the oven and prepare ${joinedInstructions(main)}.`, "Arrange the ingredients evenly on a baking tray.", ...protein.map((food) => preparationStep(food, locale)), ...(sauces.length ? [`Add ${joinedInstructions(sauces)}.`] : []), "Roast until the vegetables and roots are tender.", "Season lightly to taste and serve."],
     };
   }
 
@@ -311,14 +338,14 @@ export const buildTechniqueRecipe = (
   }
 
   if (technique.id === "boil_and_assemble") {
-    const base = foods.find((food) => hasIdentity(food, boilableCarbIds))!;
+    const base = foods.find((food) => hasKind(food, ["pasta", "rice", "noodles", "potato", "grain", "other_carb"]))!;
     const additions = foods.filter((food) => food !== base);
     return locale === "zh-CN" ? {
       name: `${sideText(additions.slice(0, 2))}配${displayName(base, locale)}`,
-      instructions: [`按包装说明煮热${instructionName(base, locale)}。`, `按需将${joinedInstructions(additions)}彻底烹熟或处理至可食用。`, "将所有食材组合装盘，按口味少量调味。"],
+      instructions: [`按包装说明煮热${instructionName(base, locale)}。`, ...protein.map((food) => preparationStep(food, locale)), `按需准备${joinedInstructions(additions)}。`, "将所有食材组合装盘，按口味少量调味。"],
     } : {
       name: `${sideText(additions.slice(0, 2))} with ${displayName(base, locale)}`,
-      instructions: [`Cook or heat the ${instructionName(base, locale)} according to the package instructions.`, `Cook or prepare ${joinedInstructions(additions)} until ready to eat.`, "Assemble everything on a plate and season lightly to taste."],
+      instructions: [`Cook or heat the ${instructionName(base, locale)} according to the package instructions.`, ...protein.map((food) => preparationStep(food, locale)), `Prepare ${joinedInstructions(additions)} as needed.`, "Assemble everything on a plate and season lightly to taste."],
     };
   }
 

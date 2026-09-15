@@ -16,7 +16,7 @@ import { targetForMealRegeneration } from "../engine/dailyGenerator";
 import { createSavedRecipeSnapshot, deriveGeneratedRecipe, findRecipeTemplate, getMealCompatibleTechniques, recipeSnapshotKey } from "../engine/generatedRecipe";
 import { getCompatibleTechniques, selectDefaultTechnique } from "../engine/cookingTechnique";
 import { getIngredientSwapCandidates } from "../engine/recipeSwap";
-import { createShoppingItemsFromNeeds, mergeShoppingItems } from "../engine/shoppingEngine";
+import { createShoppingItemsFromNeeds, mergeShoppingItems, resolveShoppingItemUserFood } from "../engine/shoppingEngine";
 import { DEFAULT_LOCALE, isLocale, type Locale } from "../i18n/locale";
 import type {
   DailyPlan,
@@ -545,10 +545,12 @@ export const useAppStore = create<AppState>()(
         const state = get();
         const item = state.shoppingItems.find((candidate) => candidate.id === id);
         if (!item) return false;
-        const existingFood = state.foods.find((food) => food.id === item.foodId)
-          ?? (item.referenceFoodId
-            ? state.foods.find((food) => food.referenceFoodId === item.referenceFoodId)
-            : undefined);
+        const exactFood = state.foods.find((food) => food.id === item.foodId);
+        const referenceMatches = item.referenceFoodId
+          ? state.foods.filter((food) => food.referenceFoodId === item.referenceFoodId)
+          : [];
+        if (!exactFood && referenceMatches.length > 1) return false;
+        const existingFood = resolveShoppingItemUserFood(item, state.foods);
         if (existingFood) {
           set({
             foods: state.foods.map((food) => food.id === existingFood.id

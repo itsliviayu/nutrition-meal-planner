@@ -9,8 +9,8 @@ export const mealBlueprints: MealBlueprint[] = [
     equipment: ["hob"],
     tags: ["breakfast", "savoury", "quick"],
     slots: [
-      { id: "eggs", type: "specific", allowedFoodIds: ["egg"], minItems: 1, maxItems: 1, optional: false },
-      { id: "toast", type: "specific", allowedFoodIds: ["wholemeal-toast", "white-bread", "bagel"], minItems: 1, maxItems: 1, optional: false },
+      { id: "eggs", type: "specific", allowedIngredientKinds: ["egg"], minItems: 1, maxItems: 1, optional: false },
+      { id: "toast", type: "specific", allowedIngredientKinds: ["bread"], minItems: 1, maxItems: 1, optional: false },
       { id: "vegetable", type: "vegetable", allowedTags: ["breakfast"], minItems: 0, maxItems: 1, optional: true },
     ],
     nameRule: { ingredientSlotIds: ["eggs", "vegetable"], suffix: "Toast", maxIngredients: 2 },
@@ -29,7 +29,7 @@ export const mealBlueprints: MealBlueprint[] = [
     equipment: [],
     tags: ["breakfast", "sweet", "quick", "no_cook"],
     slots: [
-      { id: "yogurt", type: "specific", allowedFoodIds: ["greek-yogurt", "skyr", "cottage-cheese"], minItems: 1, maxItems: 1, optional: false },
+      { id: "yogurt", type: "specific", allowedIngredientKinds: ["yogurt_dairy"], minItems: 1, maxItems: 1, optional: false },
       { id: "fruit", type: "fruit", minItems: 1, maxItems: 2, optional: false },
       { id: "topping", type: "fat_sauce", allowedTags: ["sweet"], minItems: 0, maxItems: 1, optional: true },
     ],
@@ -49,8 +49,8 @@ export const mealBlueprints: MealBlueprint[] = [
     equipment: ["microwave"],
     tags: ["breakfast", "sweet", "quick"],
     slots: [
-      { id: "oats", type: "specific", allowedFoodIds: ["oats"], minItems: 1, maxItems: 1, optional: false },
-      { id: "protein", type: "specific", allowedFoodIds: ["semi-skimmed-milk", "greek-yogurt", "skyr"], minItems: 1, maxItems: 1, optional: false },
+      { id: "oats", type: "specific", allowedIngredientKinds: ["oats"], minItems: 1, maxItems: 1, optional: false },
+      { id: "protein", type: "specific", allowedIngredientKinds: ["milk", "yogurt_dairy"], minItems: 1, maxItems: 1, optional: false },
       { id: "fruit", type: "fruit", minItems: 0, maxItems: 1, optional: true },
     ],
     nameRule: { ingredientSlotIds: ["fruit", "protein"], suffix: "Oat Bowl", maxIngredients: 1 },
@@ -69,7 +69,7 @@ export const mealBlueprints: MealBlueprint[] = [
     equipment: ["hob"],
     tags: ["breakfast", "savoury", "quick"],
     slots: [
-      { id: "toast", type: "specific", allowedFoodIds: ["wholemeal-toast", "white-bread", "bagel"], minItems: 1, maxItems: 1, optional: false },
+      { id: "toast", type: "specific", allowedIngredientKinds: ["bread"], minItems: 1, maxItems: 1, optional: false },
       { id: "protein", type: "protein", allowedTags: ["breakfast", "savoury"], minItems: 1, maxItems: 1, optional: false },
       { id: "vegetable", type: "vegetable", allowedTags: ["breakfast"], minItems: 0, maxItems: 1, optional: true },
     ],
@@ -89,7 +89,7 @@ export const mealBlueprints: MealBlueprint[] = [
     equipment: [],
     tags: ["breakfast", "quick"],
     slots: [
-      { id: "quick-items", type: "specific", allowedFoodIds: ["egg", "greek-yogurt", "skyr", "cottage-cheese", "wholemeal-toast", "white-bread", "bagel", "banana", "apple", "blueberries"], minItems: 2, maxItems: 3, optional: false },
+      { id: "quick-items", type: "specific", allowedIngredientKinds: ["egg", "yogurt_dairy", "bread", "cereal", "fruit"], minItems: 2, maxItems: 3, optional: false },
     ],
     nameRule: { ingredientSlotIds: ["quick-items"], suffix: "Breakfast Plate", maxIngredients: 2 },
     instructionSteps: [
@@ -105,7 +105,7 @@ export const mealBlueprints: MealBlueprint[] = [
     equipment: ["hob"],
     tags: ["lunch", "savoury", "pasta"],
     slots: [
-      { id: "pasta", type: "specific", allowedFoodIds: ["pasta", "wholewheat-pasta"], minItems: 1, maxItems: 1, optional: false },
+      { id: "pasta", type: "specific", allowedIngredientKinds: ["pasta"], minItems: 1, maxItems: 1, optional: false },
       { id: "protein", type: "protein", minItems: 1, maxItems: 1, optional: false },
       { id: "vegetable", type: "vegetable", minItems: 1, maxItems: 2, optional: false },
       { id: "sauce", type: "fat_sauce", minItems: 0, maxItems: 1, optional: true },
@@ -127,7 +127,7 @@ export const mealBlueprints: MealBlueprint[] = [
     equipment: ["hob"],
     tags: ["lunch", "savoury", "rice"],
     slots: [
-      { id: "rice", type: "specific", allowedFoodIds: ["white-rice", "brown-rice"], minItems: 1, maxItems: 1, optional: false },
+      { id: "rice", type: "specific", allowedIngredientKinds: ["rice"], minItems: 1, maxItems: 1, optional: false },
       { id: "protein", type: "protein", minItems: 1, maxItems: 1, optional: false },
       { id: "vegetable", type: "vegetable", minItems: 1, maxItems: 2, optional: false },
       { id: "sauce", type: "fat_sauce", minItems: 0, maxItems: 1, optional: true },
@@ -150,9 +150,9 @@ export const mealBlueprints: MealBlueprint[] = [
     tags: ["lunch", "savoury", "quick"],
     slots: [
       { id: "protein", type: "protein", minItems: 1, maxItems: 1, optional: false },
-      { id: "base", type: "specific", allowedFoodIds: ["white-rice", "brown-rice", "egg-noodles"], minItems: 1, maxItems: 1, optional: false },
+      { id: "base", type: "specific", allowedIngredientKinds: ["rice", "noodles"], minItems: 1, maxItems: 1, optional: false },
       { id: "vegetable", type: "vegetable", minItems: 1, maxItems: 2, optional: false },
-      { id: "sauce", type: "specific", allowedFoodIds: ["soy-sauce", "olive-oil", "rapeseed-oil"], minItems: 0, maxItems: 1, optional: true },
+      { id: "sauce", type: "specific", allowedIngredientKinds: ["sauce", "oil_fat"], minItems: 0, maxItems: 1, optional: true },
     ],
     nameRule: { ingredientSlotIds: ["protein", "vegetable"], suffix: "Stir Fry", maxIngredients: 2 },
     instructionSteps: [
@@ -172,9 +172,9 @@ export const mealBlueprints: MealBlueprint[] = [
     tags: ["lunch", "savoury", "oven"],
     slots: [
       { id: "protein", type: "protein", allowedTags: ["oven"], minItems: 1, maxItems: 1, optional: false },
-      { id: "potato", type: "specific", allowedFoodIds: ["potato", "sweet-potato"], minItems: 1, maxItems: 1, optional: false },
+      { id: "potato", type: "specific", allowedIngredientKinds: ["potato"], minItems: 1, maxItems: 1, optional: false },
       { id: "vegetable", type: "vegetable", allowedTags: ["oven"], minItems: 1, maxItems: 2, optional: false },
-      { id: "oil", type: "specific", allowedFoodIds: ["olive-oil", "rapeseed-oil"], minItems: 0, maxItems: 1, optional: true },
+      { id: "oil", type: "specific", allowedIngredientKinds: ["oil_fat"], minItems: 0, maxItems: 1, optional: true },
     ],
     nameRule: { ingredientSlotIds: ["protein", "potato"], suffix: "Tray", maxIngredients: 2 },
     instructionSteps: [
@@ -193,7 +193,7 @@ export const mealBlueprints: MealBlueprint[] = [
     equipment: [],
     tags: ["lunch", "savoury", "quick"],
     slots: [
-      { id: "wrap", type: "specific", allowedFoodIds: ["tortilla-wrap"], minItems: 1, maxItems: 1, optional: false },
+      { id: "wrap", type: "specific", allowedIngredientKinds: ["wrap"], minItems: 1, maxItems: 1, optional: false },
       { id: "protein", type: "protein", minItems: 1, maxItems: 1, optional: false },
       { id: "vegetable", type: "vegetable", minItems: 1, maxItems: 2, optional: false },
       { id: "sauce", type: "fat_sauce", minItems: 0, maxItems: 1, optional: true },
@@ -216,7 +216,7 @@ export const mealBlueprints: MealBlueprint[] = [
     equipment: ["microwave"],
     tags: ["lunch", "savoury"],
     slots: [
-      { id: "potato", type: "specific", allowedFoodIds: ["potato", "sweet-potato"], minItems: 1, maxItems: 1, optional: false },
+      { id: "potato", type: "specific", allowedIngredientKinds: ["potato"], minItems: 1, maxItems: 1, optional: false },
       { id: "protein", type: "protein", minItems: 1, maxItems: 1, optional: false },
       { id: "vegetable", type: "vegetable", minItems: 1, maxItems: 2, optional: false },
       { id: "sauce", type: "fat_sauce", minItems: 0, maxItems: 1, optional: true },
@@ -238,7 +238,7 @@ export const mealBlueprints: MealBlueprint[] = [
     equipment: [],
     tags: ["snack", "sweet", "quick", "no_cook"],
     slots: [
-      { id: "yogurt", type: "specific", allowedFoodIds: ["greek-yogurt", "skyr", "cottage-cheese"], minItems: 1, maxItems: 1, optional: false },
+      { id: "yogurt", type: "specific", allowedIngredientKinds: ["yogurt_dairy"], minItems: 1, maxItems: 1, optional: false },
       { id: "fruit", type: "fruit", minItems: 0, maxItems: 1, optional: true },
     ],
     nameRule: { ingredientSlotIds: ["yogurt", "fruit"], suffix: "Snack", maxIngredients: 2 },
@@ -256,7 +256,7 @@ export const mealBlueprints: MealBlueprint[] = [
     equipment: ["hob"],
     tags: ["snack", "savoury", "quick"],
     slots: [
-      { id: "egg", type: "specific", allowedFoodIds: ["egg"], minItems: 1, maxItems: 1, optional: false },
+      { id: "egg", type: "specific", allowedIngredientKinds: ["egg"], minItems: 1, maxItems: 1, optional: false },
       { id: "produce", type: "specific", allowedFoodIds: ["tomato", "carrot", "cucumber", "celery"], minItems: 0, maxItems: 1, optional: true },
     ],
     nameRule: { ingredientSlotIds: ["egg", "produce"], suffix: "Snack", maxIngredients: 2 },

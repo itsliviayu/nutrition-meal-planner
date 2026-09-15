@@ -7,6 +7,7 @@ import {
   foodTagLabel,
   getFoodDisplayName,
   getReferenceDisplayName,
+  ingredientKindLabel,
   mealTypeLabel,
   translate,
 } from "./locale";
@@ -29,5 +30,6 @@ export function useLocale() {
     mealName: useCallback((mealType: Parameters<typeof mealTypeLabel>[0], short = false) => mealTypeLabel(mealType, locale, short), [locale]),
     equipmentName: useCallback((equipment: Parameters<typeof equipmentLabel>[0]) => equipmentLabel(equipment, locale), [locale]),
     tagName: useCallback((tag: Parameters<typeof foodTagLabel>[0]) => foodTagLabel(tag, locale), [locale]),
+    ingredientKindName: useCallback((kind: Parameters<typeof ingredientKindLabel>[0]) => ingredientKindLabel(kind, locale), [locale]),
   };
 }

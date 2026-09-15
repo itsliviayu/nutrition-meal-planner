@@ -22,13 +22,20 @@ import { foodMatchesSlot } from "./mealGenerator";
 const normalizeName = (name: string): string =>
   name.trim().toLocaleLowerCase("en-GB").replaceAll(/\s+/g, " ");
 
+export const findUniqueReferenceUserFood = (
+  referenceFoodId: string | undefined,
+  foods: Food[],
+): Food | undefined => {
+  if (!referenceFoodId) return undefined;
+  const matches = foods.filter((food) => food.referenceFoodId === referenceFoodId);
+  return matches.length === 1 ? matches[0] : undefined;
+};
+
 const findCurrentUserFood = (
   ingredient: RecipeIngredientSnapshot,
   foods: Food[],
 ): Food | undefined => foods.find((food) => food.id === ingredient.foodId)
-  ?? (ingredient.referenceFoodId
-    ? foods.find((food) => food.referenceFoodId === ingredient.referenceFoodId)
-    : undefined);
+  ?? findUniqueReferenceUserFood(ingredient.referenceFoodId, foods);
 
 const needFromIngredient = (
   ingredient: RecipeIngredientSnapshot,
@@ -68,11 +75,17 @@ const dedupeNeeds = (needs: ShoppingNeed[]): ShoppingNeed[] => {
 
 export const shoppingIdentityKey = (
   item: Pick<ShoppingItem | ShoppingNeed, "foodId" | "referenceFoodId" | "displayName">,
-): string => item.referenceFoodId
-  ? `reference:${item.referenceFoodId}`
-  : item.foodId
-    ? `food:${item.foodId}`
+): string => item.foodId
+  ? `food:${item.foodId}`
+  : item.referenceFoodId
+    ? `reference:${item.referenceFoodId}`
     : `name:${normalizeName(item.displayName)}`;
+
+export const resolveShoppingItemUserFood = (
+  item: Pick<ShoppingItem, "foodId" | "referenceFoodId">,
+  foods: Food[],
+): Food | undefined => foods.find((food) => food.id === item.foodId)
+  ?? findUniqueReferenceUserFood(item.referenceFoodId, foods);
 
 export const getGeneratedRecipeNeeds = (
   recipe: GeneratedRecipe,

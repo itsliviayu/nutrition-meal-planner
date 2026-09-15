@@ -4,7 +4,8 @@ import { createUserFoodFromReference } from "../data/foodFactory";
 import { initialUserFoods } from "../data/initialFoods";
 import { referenceFoods } from "../data/referenceFoods";
 import { ONLY_CANDIDATE_MESSAGE } from "../engine/mealGenerator";
-import type { DailyPlan, MealPlan, MealType, SavedRecipe, ShoppingItem } from "../types";
+import { effectiveIngredientKind } from "../engine/foodSemantics";
+import type { DailyPlan, Food, MealPlan, MealType, SavedRecipe, ShoppingItem } from "../types";
 import type { PlanningMode } from "../utils/planningMode";
 import {
   APP_STORAGE_VERSION,
@@ -222,6 +223,77 @@ describe("mode-specific DailyPlan state", () => {
   });
 });
 
+describe("editable Reference-linked User Foods", () => {
+  const milkReference = referenceFoods.find((food) => food.id === "semi-skimmed-milk")!;
+  const milk = (): Food => createUserFoodFromReference(milkReference, {
+    id: "user-milk",
+    inStock: true,
+  });
+
+  it("edits User Food identity and serving fields without changing reference nutrition lineage", () => {
+    const userMilk = milk();
+    useAppStore.setState({ foods: [userMilk] });
+
+    useAppStore.getState().editFood(userMilk.id, {
+      name: "Tesco 半脱脂牛奶",
+      brand: "Tesco",
+      store: "Tesco Express",
+      defaultServing: 250,
+    });
+
+    expect(useAppStore.getState().foods[0]).toMatchObject({
+      name: "Tesco 半脱脂牛奶",
+      brand: "Tesco",
+      store: "Tesco Express",
+      defaultServing: 250,
+      referenceFoodId: milkReference.id,
+      nutritionSource: "reference",
+      nutrition: milkReference.nutrition,
+    });
+    expect(milkReference.name).toBe("Semi-skimmed Milk");
+  });
+
+  it("allows two explicitly created customized copies with the same reference ancestry", () => {
+    const first = createUserFoodFromReference(milkReference, { id: "milk-one", name: "Breakfast milk" });
+    const second = createUserFoodFromReference(milkReference, { id: "milk-two", name: "Coffee milk" });
+    useAppStore.setState({ foods: [] });
+
+    useAppStore.getState().addFood(first);
+    useAppStore.getState().addFood(second);
+
+    expect(useAppStore.getState().foods.map((food) => food.name)).toEqual(["Breakfast milk", "Coffee milk"]);
+    expect(useAppStore.getState().foods.every((food) => food.referenceFoodId === milkReference.id)).toBe(true);
+  });
+
+  it("round-trips a customized name and package nutrition while retaining referenceFoodId in V6", () => {
+    const customized = {
+      ...milk(),
+      name: "Tesco milk",
+      nutritionSource: "package_label" as const,
+      nutrition: { ...milkReference.nutrition, calories: 50 },
+    };
+    const restored = normalizePersistedAppData(JSON.parse(JSON.stringify({
+      locale: "en",
+      profile: defaultProfile,
+      foods: [customized],
+      dailyPlans: { free: null, inventory: null },
+      activePlanningMode: "free",
+      savedRecipes: [],
+      shoppingItems: [],
+      recentFoodIds: [],
+      recentRecipeTemplateIds: [],
+    })));
+
+    expect(APP_STORAGE_VERSION).toBe(6);
+    expect(restored.foods[0]).toMatchObject({
+      name: "Tesco milk",
+      nutritionSource: "package_label",
+      referenceFoodId: milkReference.id,
+      nutrition: { calories: 50 },
+    });
+  });
+});
+
 describe("V6 persisted app data", () => {
   it("restores both plans, the selected mode and Saved Recipes after a JSON round trip", () => {
     const saved: PersistedAppData = {
@@ -256,6 +328,18 @@ describe("V6 persisted app data", () => {
     expect(restored.shoppingItems).toEqual([]);
     expect(restored.recentFoodIds).toEqual([]);
     expect(restored.locale).toBe("zh-CN");
+  });
+
+  it("restores foods without IngredientKind and resolves semantics without a schema upgrade", () => {
+    const linked = createUserFoodFromReference(referenceFoods.find((food) => food.id === "pasta")!, { id: "legacy-linked" });
+    delete linked.ingredientKind;
+    const custom = { ...linked, id: "legacy-custom", referenceFoodId: undefined, category: "protein" as const };
+    const restored = normalizePersistedAppData({ foods: [linked, custom] });
+
+    expect(APP_STORAGE_VERSION).toBe(6);
+    expect(restored.foods.every((food) => food.ingredientKind === undefined)).toBe(true);
+    expect(effectiveIngredientKind(restored.foods[0])).toBe("pasta");
+    expect(effectiveIngredientKind(restored.foods[1])).toBe("other_protein");
   });
 });
 

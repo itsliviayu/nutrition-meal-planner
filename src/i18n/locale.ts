@@ -1,4 +1,5 @@
-import type { Equipment, Food, FoodCategory, FoodTag, MealType, ReferenceFood } from "../types";
+import type { Equipment, Food, FoodCategory, FoodTag, IngredientKind, MealType, ReferenceFood } from "../types";
+import { referenceFoods } from "../data/referenceFoods";
 import { referenceFoodNamesZh } from "./foodNames";
 import { translations, type Locale, type TranslationKey } from "./translations";
 
@@ -49,9 +50,14 @@ export const getFoodDisplayName = (
   locale: Locale,
 ): string => {
   if (locale !== "zh-CN") return food.name;
-  const referenceFoodId = food.referenceFoodId
-    ?? (food.nutritionSource === "reference" ? food.id : undefined);
-  return getReferenceFoodDisplayName(referenceFoodId, food.name, locale);
+  if (food.referenceFoodId) {
+    const referenceFood = referenceFoods.find((reference) => reference.id === food.referenceFoodId);
+    if (referenceFood && food.name !== referenceFood.name) return food.name;
+    return getReferenceFoodDisplayName(food.referenceFoodId, food.name, locale);
+  }
+  return food.nutritionSource === "reference"
+    ? getReferenceFoodDisplayName(food.id, food.name, locale)
+    : food.name;
 };
 
 export const getReferenceDisplayName = (food: ReferenceFood, locale: Locale): string =>
@@ -68,6 +74,9 @@ export const equipmentLabel = (equipment: Equipment, locale: Locale): string =>
 
 export const foodTagLabel = (tag: FoodTag, locale: Locale): string =>
   translate(locale, `tag.${tag}` as TranslationKey);
+
+export const ingredientKindLabel = (ingredientKind: IngredientKind, locale: Locale): string =>
+  translate(locale, `ingredientKind.${ingredientKind}` as TranslationKey);
 
 const generationMessageKeys: Record<string, TranslationKey> = {
   "No valid combination found with the current locked foods.": "generation.locked",

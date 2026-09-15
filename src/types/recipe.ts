@@ -1,4 +1,4 @@
-import type { FoodCategory, FoodTag } from "./food";
+import type { FoodCategory, FoodTag, IngredientKind } from "./food";
 import type { MealItem, MealType } from "./meal";
 import type { Nutrition, ServingUnit } from "./nutrition";
 import type { Equipment } from "./profile";
@@ -41,6 +41,9 @@ export interface CookingTechnique {
   minIngredients: number;
   maxIngredients: number;
   requiredCategories?: FoodCategory[];
+  requiredAnyIngredientKinds?: IngredientKind[];
+  requiredAllIngredientKinds?: IngredientKind[];
+  excludedIngredientKinds?: IngredientKind[];
   requiredAnyFoodIds?: string[];
   requiredAllFoodIds?: string[];
   excludedFoodIds?: string[];
@@ -52,6 +55,7 @@ export interface CookingTechnique {
 export interface RecipeSlot {
   id: string;
   type: FoodCategory | "specific";
+  allowedIngredientKinds?: IngredientKind[];
   allowedFoodIds?: string[];
   allowedTags?: FoodTag[];
   minItems: number;

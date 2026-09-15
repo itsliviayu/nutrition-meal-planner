@@ -1,23 +1,30 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { PortionNutritionPreview } from "../components/PortionNutritionPreview";
+import { createUserFoodFromReference } from "../data/foodFactory";
+import { defaultIngredientKindForCategory, isIngredientKindCompatibleWithCategory } from "../data/ingredientKinds";
+import { referenceFoods } from "../data/seedFoods";
 import { isServingUnitCompatible } from "../engine/nutritionCalculator";
 import { useLocale } from "../i18n/useLocale";
 import { useAppStore } from "../stores/useAppStore";
-import type { Food, FoodTag, MealType, NutritionBasis, NutritionSource, ServingUnit } from "../types";
-import { FOOD_CATEGORIES, FOOD_TAGS, MEAL_TYPES } from "../utils/foodOptions";
+import type { Food, FoodTag, IngredientKind, MealType, NutritionBasis, NutritionSource, ServingUnit } from "../types";
+import { FOOD_CATEGORIES, FOOD_TAGS, ingredientKindOptionsForCategory, MEAL_TYPES } from "../utils/foodOptions";
 import { createId } from "../utils/id";
 import {
   createFoodFormDraft,
+  changeDraftNutritionSource,
   foodFromFormDraft,
   foodPreviewFromDraft,
+  isNutritionEditable,
   isValidOptionalNumber,
   isValidRequiredNumber,
   parseNumericDraft,
+  restoreDraftReferenceNutrition,
   type NutritionFormDraft,
 } from "../utils/foodFormDraft";
 
 interface FoodFormPageProps {
   foodId?: string;
+  referenceFoodId?: string;
   onDone: () => void;
   onCancel?: () => void;
 }
@@ -38,18 +45,35 @@ const OPTIONAL_NUTRIENTS: Array<{ key: keyof Pick<NutritionFormDraft, "sugar" | 
 const toggleArrayValue = <T extends string>(values: T[], value: T): T[] =>
   values.includes(value) ? values.filter((item) => item !== value) : [...values, value];
 
-export function FoodFormPage({ foodId, onDone, onCancel = onDone }: FoodFormPageProps) {
-  const { categoryName, foodName, mealName, t, tagName } = useLocale();
+export function FoodFormPage({ foodId, referenceFoodId, onDone, onCancel = onDone }: FoodFormPageProps) {
+  const { categoryName, foodName, ingredientKindName, mealName, referenceFoodName, t, tagName } = useLocale();
   const existingFood = useAppStore((state) => state.foods.find((food) => food.id === foodId));
+  const referenceFood = referenceFoods.find((food) => food.id === (existingFood?.referenceFoodId ?? referenceFoodId));
   const addFood = useAppStore((state) => state.addFood);
   const editFood = useAppStore((state) => state.editFood);
   const deleteFood = useAppStore((state) => state.deleteFood);
-  const [draft, setDraft] = useState(() => createFoodFormDraft(existingFood));
+  const [draft, setDraft] = useState(() => createFoodFormDraft(existingFood ?? (referenceFood
+    ? createUserFoodFromReference(referenceFood, {
+      id: "",
+      inStock: true,
+      regularBuy: false,
+      favourite: false,
+    })
+    : undefined)));
   const [errors, setErrors] = useState<string[]>([]);
   const isEditing = Boolean(existingFood);
-  const displayedDraftName = draft.referenceFoodId && draft.name === existingFood?.name
-    ? foodName(draft)
+  const displayedDraftName = referenceFood && draft.name === referenceFood.name
+    ? referenceFoodName(referenceFood)
     : draft.name;
+  const nutritionEditable = isNutritionEditable(draft);
+  const nutritionSourceLabel = t(draft.nutritionSource === "reference"
+    ? "common.referenceNutrition"
+    : draft.nutritionSource === "package_label"
+      ? "common.packageLabel"
+      : "common.manualEstimate");
+  const currentIngredientKind = draft.ingredientKind
+    ?? referenceFood?.ingredientKind
+    ?? defaultIngredientKindForCategory(draft.category);
 
   const updateNutrition = (key: keyof NutritionFormDraft, value: string) => {
     setDraft((current) => ({ ...current, nutrition: { ...current.nutrition, [key]: value } }));
@@ -91,6 +115,9 @@ export function FoodFormPage({ foodId, onDone, onCancel = onDone }: FoodFormPage
       ...parsedDraft,
       id: existingFood?.id ?? createId(),
       name: parsedDraft.name.trim(),
+      ingredientKind: parsedDraft.ingredientKind
+        ?? referenceFood?.ingredientKind
+        ?? defaultIngredientKindForCategory(parsedDraft.category),
       brand: parsedDraft.brand?.trim() || undefined,
       store: parsedDraft.store?.trim() || undefined,
       gramsPerUnit: parsedDraft.gramsPerUnit && parsedDraft.gramsPerUnit > 0 ? parsedDraft.gramsPerUnit : undefined,
@@ -113,17 +140,27 @@ export function FoodFormPage({ foodId, onDone, onCancel = onDone }: FoodFormPage
   };
 
   const handleSourceChange = (nutritionSource: NutritionSource) => {
-    setDraft((current) => ({
-      ...current,
-      nutritionSource,
-      estimatedNutrition: nutritionSource !== "package_label",
-      referenceFoodId: nutritionSource === "reference" ? current.referenceFoodId : undefined,
-      fibreSourceMethod: nutritionSource === "manual_estimate" || current.nutrition.fibre.trim() === ""
-        ? undefined
-        : nutritionSource === "package_label"
-          ? "AOAC"
-          : current.fibreSourceMethod,
-    }));
+    setDraft((current) => changeDraftNutritionSource(current, nutritionSource));
+  };
+
+  const handleCategoryChange = (category: Food["category"]) => {
+    setDraft((current) => {
+      const ingredientKind = current.ingredientKind
+        ?? referenceFood?.ingredientKind
+        ?? defaultIngredientKindForCategory(current.category);
+      return {
+        ...current,
+        category,
+        ingredientKind: isIngredientKindCompatibleWithCategory(ingredientKind, category)
+          ? ingredientKind
+          : defaultIngredientKindForCategory(category),
+      };
+    });
+  };
+
+  const restoreReferenceNutrition = () => {
+    if (!referenceFood) return;
+    setDraft((current) => restoreDraftReferenceNutrition(current, referenceFood));
   };
 
   const handleDelete = () => {
@@ -132,7 +169,7 @@ export function FoodFormPage({ foodId, onDone, onCancel = onDone }: FoodFormPage
     onDone();
   };
 
-  if (foodId && !existingFood) {
+  if ((foodId && !existingFood) || (referenceFoodId && !referenceFood)) {
     return <section className="empty-state"><h2>{t("form.foodNotFound")}</h2><button className="primary-button" type="button" onClick={onDone}>{t("form.backToFoods")}</button></section>;
   }
 
@@ -145,23 +182,46 @@ export function FoodFormPage({ foodId, onDone, onCancel = onDone }: FoodFormPage
         <div className="form-section-heading"><span>01</span><div><h2>{t("form.detailsTitle")}</h2><p>{t("form.detailsBody")}</p></div></div>
         <div className="field-grid">
           <label className="field field--wide"><span>{t("form.name")} *</span><input autoFocus value={displayedDraftName} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder={t("form.namePlaceholder")} /></label>
-          <label className="field"><span>{t("form.category")} *</span><select value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value as Food["category"] })}>{FOOD_CATEGORIES.map((option) => <option key={option.value} value={option.value}>{categoryName(option.value)}</option>)}</select></label>
+          <label className="field"><span>{t("form.category")} *</span><select value={draft.category} onChange={(event) => handleCategoryChange(event.target.value as Food["category"])}>{FOOD_CATEGORIES.map((option) => <option key={option.value} value={option.value}>{categoryName(option.value)}</option>)}</select></label>
+          <label className="field"><span>{t("form.ingredientType")} *</span><select value={currentIngredientKind} onChange={(event) => setDraft({ ...draft, ingredientKind: event.target.value as IngredientKind })}>{ingredientKindOptionsForCategory(draft.category).map((ingredientKind) => <option key={ingredientKind} value={ingredientKind}>{ingredientKindName(ingredientKind)}</option>)}</select><small>{t("form.ingredientTypeHelp")}</small></label>
           <label className="field"><span>{t("form.brand")}</span><input value={draft.brand ?? ""} onChange={(event) => setDraft({ ...draft, brand: event.target.value })} placeholder={t("common.optional")} /></label>
           <label className="field"><span>{t("form.store")}</span><input value={draft.store ?? ""} onChange={(event) => setDraft({ ...draft, store: event.target.value })} placeholder={t("confirm.storePlaceholder")} /></label>
-          <label className="field"><span>{t("form.nutritionSource")} *</span><select value={draft.nutritionSource} onChange={(event) => handleSourceChange(event.target.value as NutritionSource)}><option value="package_label">{t("common.packageLabel")}</option><option value="manual_estimate">{t("common.manualEstimate")}</option>{draft.referenceFoodId && <option value="reference">{t("common.referenceNutrition")}</option>}</select></label>
         </div>
+        {referenceFood && (
+          <aside className="reference-provenance">
+            <div><span>{t("form.referenceFood")}</span><strong>{referenceFoodName(referenceFood)}</strong><small>{referenceFood.referenceSourceName}</small></div>
+            <p>{t("form.renameKeepsNutrition")}</p>
+          </aside>
+        )}
       </section>
 
       <section className="form-card">
-        <div className="form-section-heading"><span>02</span><div><h2>{t("form.nutritionTitle")}</h2><p>{t("form.nutritionBody")}</p></div></div>
-        <label className="field"><span>{t("form.nutritionBasis")} *</span><select value={draft.nutritionBasis} onChange={(event) => handleBasisChange(event.target.value as NutritionBasis)}><option value="per_100g">{t("form.per100g")}</option><option value="per_100ml">{t("form.per100ml")}</option><option value="per_unit">{t("form.perUnit")}</option></select></label>
+        <div className="form-section-heading"><span>02</span><div><h2>{t("form.nutritionTitle")}</h2><p>{t(nutritionEditable ? "form.nutritionBody" : "form.referenceNutritionBody")}</p></div></div>
+        <div className="nutrition-source-panel">
+          <div><span>{t("form.currentNutritionSource")}</span><strong>{nutritionSourceLabel}</strong>{draft.nutritionSource === "reference" && referenceFood && <small>{referenceFoodName(referenceFood)} · {referenceFood.referenceSourceName}</small>}</div>
+          <div className="nutrition-source-actions">
+            {draft.nutritionSource === "reference" ? (
+              <>
+                <button type="button" className="secondary-button" onClick={() => handleSourceChange("package_label")}>{t("form.usePackageNutrition")}</button>
+                <button type="button" className="text-button source-manual" onClick={() => handleSourceChange("manual_estimate")}>{t("form.enterNutritionManually")}</button>
+              </>
+            ) : (
+              <>
+                <button type="button" className={draft.nutritionSource === "package_label" ? "source-choice is-active" : "source-choice"} aria-pressed={draft.nutritionSource === "package_label"} onClick={() => handleSourceChange("package_label")}>{t("common.packageLabel")}</button>
+                <button type="button" className={draft.nutritionSource === "manual_estimate" ? "source-choice is-active" : "source-choice"} aria-pressed={draft.nutritionSource === "manual_estimate"} onClick={() => handleSourceChange("manual_estimate")}>{t("common.manualEstimate")}</button>
+                {referenceFood && <button type="button" className="text-button source-restore" onClick={restoreReferenceNutrition}>{t("form.useReferenceNutrition")}</button>}
+              </>
+            )}
+          </div>
+        </div>
+        <label className="field"><span>{t("form.nutritionBasis")} *</span><select disabled={!nutritionEditable} value={draft.nutritionBasis} onChange={(event) => handleBasisChange(event.target.value as NutritionBasis)}><option value="per_100g">{t("form.per100g")}</option><option value="per_100ml">{t("form.per100ml")}</option><option value="per_unit">{t("form.perUnit")}</option></select></label>
         <div className="field-grid field-grid--nutrition">
           {REQUIRED_NUTRIENTS.map(({ key, labelKey, unit }) => (
-            <label className="field" key={key}><span>{t(labelKey)} *</span><div className="input-with-unit"><input type="number" inputMode="decimal" min="0" step="any" value={draft.nutrition[key]} onChange={(event) => updateNutrition(key, event.target.value)} /><span>{unit}</span></div></label>
+            <label className="field" key={key}><span>{t(labelKey)} *</span><div className="input-with-unit"><input readOnly={!nutritionEditable} aria-readonly={!nutritionEditable} type="number" inputMode="decimal" min="0" step="any" value={draft.nutrition[key]} onChange={(event) => updateNutrition(key, event.target.value)} /><span>{unit}</span></div></label>
           ))}
-          <label className="field"><span>{t("nutrition.fibre")} {draft.nutritionSource === "reference" ? <em>{t("common.optional")}</em> : "*"}</span><div className="input-with-unit"><input type="number" inputMode="decimal" min="0" step="any" value={draft.nutrition.fibre} onChange={(event) => updateNutrition("fibre", event.target.value)} placeholder={t("form.notAvailable")} /><span>g</span></div></label>
+          <label className="field"><span>{t("nutrition.fibre")} {draft.nutritionSource === "reference" ? <em>{t("common.optional")}</em> : "*"}</span><div className="input-with-unit"><input readOnly={!nutritionEditable} aria-readonly={!nutritionEditable} type="number" inputMode="decimal" min="0" step="any" value={draft.nutrition.fibre} onChange={(event) => updateNutrition("fibre", event.target.value)} placeholder={t("form.notAvailable")} /><span>g</span></div></label>
           {OPTIONAL_NUTRIENTS.map(({ key, labelKey }) => (
-            <label className="field" key={key}><span>{t(labelKey)}</span><div className="input-with-unit"><input type="number" inputMode="decimal" min="0" step="any" value={draft.nutrition[key]} onChange={(event) => updateNutrition(key, event.target.value)} placeholder={t("common.optional")} /><span>g</span></div></label>
+            <label className="field" key={key}><span>{t(labelKey)}</span><div className="input-with-unit"><input readOnly={!nutritionEditable} aria-readonly={!nutritionEditable} type="number" inputMode="decimal" min="0" step="any" value={draft.nutrition[key]} onChange={(event) => updateNutrition(key, event.target.value)} placeholder={t("common.optional")} /><span>g</span></div></label>
           ))}
         </div>
       </section>

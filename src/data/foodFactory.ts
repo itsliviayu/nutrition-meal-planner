@@ -3,6 +3,7 @@ import { createId } from "../utils/id";
 
 interface ReferenceFoodOverrides {
   id: string;
+  name?: string;
   defaultServing?: number;
   store?: string;
   inStock?: boolean;
